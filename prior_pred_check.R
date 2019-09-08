@@ -3,6 +3,8 @@
 # Probably need to adjust some priors
 
 # Formalise posterior predictive checks and make appropriate functions
+# Like comparing number of wins, can compare number of lose and compare number of goals
+# Potentially stratify by HomeWin vs AwayWin (HomeGoals vs AwayGoals)
 
 # Initialisation ----------------------------------------------------------
 
