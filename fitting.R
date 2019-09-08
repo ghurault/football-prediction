@@ -11,6 +11,8 @@ rm(list = ls())
 seed <- 1559354162
 set.seed(seed) # Reproducibility
 
+source("functions.R")
+
 library(ggplot2)
 library(rstan)
 rstan_options(auto_write = TRUE) # Save compiled model
@@ -30,14 +32,7 @@ df <- df[order(df$Date), ]
 
 teams <- with(df, sort(unique(c(as.character(HomeTeam), as.character(AwayTeam)))))
 
-# Visualisation -----------------------------------------------------------
-
-# Heatmap results
-ggplot(data = df, aes(x = AwayTeam, y = HomeTeam, fill = FTR)) +
-  geom_raster() +
-  scale_fill_manual(values = c("#fc8d59", "#ffffbf", "#91bfdb")) +
-  theme_classic(base_size = 15) +
-  theme(axis.text.x = element_text(angle = 90))
+# heatmap_results(df) # Visualisation
 
 # Fit Stan model ----------------------------------------------------------
 
@@ -52,7 +47,7 @@ res_file <- "Results/fit_mdl1.rds"
 param_pop <- c("b", "home_advantage", "sigma_ability")
 param_ind <- c("attack", "defence")
 param_obs <- c("home_goals_rep", "away_goals_rep")
-param <- c("param_pop", "param_ind", "param_obs")
+param <- c(param_pop, param_ind, param_obs)
 
 data_stan <- list(
   N_teams = length(teams),
