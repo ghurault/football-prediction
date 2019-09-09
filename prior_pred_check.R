@@ -2,9 +2,7 @@
 
 # Probably need to adjust some priors
 
-# Formalise posterior predictive checks and make appropriate functions
-# Like comparing number of wins, can compare number of lose and compare number of goals
-# Potentially stratify by HomeWin vs AwayWin (HomeGoals vs AwayGoals)
+# Write functions for model checking and posterior predictive checks
 
 # Initialisation ----------------------------------------------------------
 
@@ -21,8 +19,8 @@ library(rstan)
 rstan_options(auto_write = TRUE) # Save compiled model
 options(mc.cores = parallel::detectCores()) # Parallel computing
 
-run_prior <- FALSE
-run_fake <- FALSE
+run_prior <- TRUE
+run_fake <- TRUE
 
 stan_code <- "Model/mdl1.stan"
 
@@ -33,7 +31,12 @@ n_chains <- 4
 n_it <- 2000
 
 param_pop <- c("b", "home_advantage", "sigma_ability")
-param_ind <- c("attack", "defence")
+param_ind <- c("attack", "defence",
+               "N_win_home_rep", "N_win_away_rep", "N_win_rep",
+               "N_draw_home_rep", "N_draw_away_rep", "N_draw_rep",
+               "N_lose_home_rep", "N_lose_away_rep", "N_lose_rep",
+               "N_goal_home_rep", "N_goal_away_rep", "N_goal_rep",
+               "N_point_rep", "rank_rep")
 param_obs <- c("home_goals_rep", "away_goals_rep")
 param <- c(param_pop, param_ind, param_obs)
 
@@ -63,19 +66,19 @@ if (run_prior) {
   fit_prior <- readRDS(prior_file)
 }
 
+# shinystan::launch_shinystan(fit_prior)
+
+# pairs(fit_prior, pars = param_pop)
+# plot(fit_prior, pars = param_pop, plotfun = "trace")
+
 # Prior predictive check ---------------------------------------------------------------
 
 if (FALSE) {
   
-  # shinystan::launch_shinystan(fit)
-  
-  # pairs(fit_prior, pars = param_pop)
-  # plot(fit_prior, pars = param_pop, plotfun = "trace")
-  
-  plot(fit_prior, pars = c(param_pop, paste(param_ind, "[1]", sep = "")), plotfun = "hist")
+  plot(fit_prior, pars = c(param_pop, paste(param_ind[1:2], "[1]", sep = "")), plotfun = "hist")
   
   # Exponentiate abilities
-  lapply(paste(param_ind, "[1]", sep = ""),
+  lapply(paste(param_ind[1:2], "[1]", sep = ""),
          function(x) {
            tmp <- extract(fit_prior, pars = x)[[1]]
            hist(exp(tmp), breaks = 40, main = paste(x, "rate"))
@@ -114,29 +117,30 @@ true_param <- rbind(
                  }))
 )
 
-
 fd <- data.frame(HomeTeam = teams[id$Home],
                  AwayTeam = teams[id$Away],
-                 HomeGoals = extract(fit_prior, pars = "home_goals_rep")[[1]][draw, ],
-                 AwayGoals = extract(fit_prior, pars = "away_goals_rep")[[1]][draw, ],
+                 FTHG = extract(fit_prior, pars = "home_goals_rep")[[1]][draw, ],
+                 FTAG = extract(fit_prior, pars = "away_goals_rep")[[1]][draw, ],
                  FTR = NA)
 fd$Game <- 1:nrow(fd)
-fd$FTR[fd$HomeGoals == fd$AwayGoals] <- "D"
-fd$FTR[fd$HomeGoals > fd$AwayGoals] <- "H"
-fd$FTR[fd$HomeGoals < fd$AwayGoals] <- "A"
+fd$FTR[fd$FTHG == fd$FTAG] <- "D"
+fd$FTR[fd$FTHG > fd$FTAG] <- "H"
+fd$FTR[fd$FTHG < fd$FTAG] <- "A"
 fd$FTR <- factor(fd$FTR, levels = c("A", "D", "H"), ordered = TRUE)
 
 heatmap_results(fd)
+
+fstats <- football_stats(fd)
 
 # Fit fake data -----------------------------------------------------------
 
 data_fake <- list(
   N_teams = n_teams,
   N_games = n_teams * (n_teams - 1),
-  home_goals = fd$HomeGoals,
-  away_goals = fd$AwayGoals,
-  home_id = sapply(df[["HomeTeam"]], function(x) {which(x == teams)}),
-  away_id = sapply(df[["AwayTeam"]], function(x) {which(x == teams)}),
+  home_goals = fd$FTHG,
+  away_goals = fd$FTAG,
+  home_id = sapply(fd[["HomeTeam"]], function(x) {which(x == teams)}),
+  away_id = sapply(fd[["AwayTeam"]], function(x) {which(x == teams)}),
   run = 1
 )
 
@@ -145,19 +149,19 @@ if (run_fake) {
                    iter = n_it, chains = n_chains, seed = seed)
   saveRDS(fit_fake, file = fake_file)
 } else {
-  fit <- readRDS(fake_file)
+  fit_fake <- readRDS(fake_file)
 }
 
 # Fake data check -------------------------------------------------------------
 
 if (FALSE) {
   
-  # shinystan::launch_shinystan(fit)
+  # shinystan::launch_shinystan(fit_fake)
   
-  pairs(fit_prior, pars = param_pop)
-  plot(fit_prior, pars = param_pop, plotfun = "trace")
+  pairs(fit_fake, pars = param_pop)
+  plot(fit_fake, pars = param_pop, plotfun = "trace")
   
-  print(fit, pars = param_pop)
+  print(fit_fake, pars = param_pop)
   
   ## Can we retrieve parameters?
   par_fake <- extract_parameters(fit_fake, param, param_ind, param_obs, teams, data_stan)
@@ -173,7 +177,7 @@ if (FALSE) {
     labs(x = "", y = "Estimate") +
     theme_bw(base_size = 20)
   # Team parameters
-  lapply(param_ind,
+  lapply(param_ind[1:2],
          function(par_name) {
            
            library(ggplot2)
@@ -240,8 +244,6 @@ if (FALSE) {
     facet_grid(rows = vars(Team)) +
     theme_bw(base_size = 15) +
     theme(legend.position = "none")
-  
-  
   
 }
 
