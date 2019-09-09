@@ -1,5 +1,16 @@
 // Poisson model with constant attack/defence abilities and constant home advantage
 
+functions {
+  int[] get_rank(int[] indices) {
+    int n = size(indices);
+    int rk[n];
+    for (i in 1:n) {
+      rk[indices[i]] = i;
+    }
+    return rk;
+  }
+}
+
 data {
     int<lower = 0> N_teams; // Number of teams
     int<lower = 0> N_games; // Number of games
@@ -52,21 +63,21 @@ generated quantities {
   int home_goals_rep[N_games] = poisson_log_rng(home_pred);
   int away_goals_rep[N_games] =  poisson_log_rng(away_pred);
   // Number of win/draw/lose
-  int N_win_home_rep[N_teams] = rep_vector(0, N_teams);
-  int N_win_away_rep[N_teams] = rep_vector(0, N_teams);
-  int N_win_rep[N_teams];
-  int N_draw_home_rep[N_teams] = rep_vector(0, N_teams);
-  int N_draw_away_rep[N_teams] = rep_vector(0, N_teams);
-  int N_draw_rep[N_teams];
-  int N_lose_home_rep[N_teams] = rep_vector(0, N_teams);
-  int N_lose_away_rep[N_teams] = rep_vector(0, N_teams);
-  int N_lose_rep[N_teams];
+  vector[N_teams] N_win_home_rep = rep_vector(0, N_teams);
+  vector[N_teams] N_win_away_rep = rep_vector(0, N_teams);
+  vector[N_teams] N_win_rep;
+  vector[N_teams] N_draw_home_rep = rep_vector(0, N_teams);
+  vector[N_teams] N_draw_away_rep = rep_vector(0, N_teams);
+  vector[N_teams] N_draw_rep;
+  vector[N_teams] N_lose_home_rep = rep_vector(0, N_teams);
+  vector[N_teams] N_lose_away_rep = rep_vector(0, N_teams);
+  vector[N_teams] N_lose_rep;
   // Number of goals
-  int N_goal_home_rep[N_teams] = rep_vector(0, N_teams);
-  int N_goal_away_rep[N_teams] = rep_vector(0, N_teams);
-  int N_goal_rep[N_teams];
+  vector[N_teams] N_goal_home_rep = rep_vector(0, N_teams);
+  vector[N_teams] N_goal_away_rep = rep_vector(0, N_teams);
+  vector[N_teams] N_goal_rep;
   // Number of points
-  int N_point_rep[N_teams];
+  vector[N_teams] N_point_rep;
   // Rank
   int rank_rep[N_teams];
   
@@ -89,5 +100,5 @@ generated quantities {
   N_lose_rep = N_lose_home_rep + N_lose_away_rep;
   N_goal_rep = N_goal_home_rep + N_goal_away_rep;
   N_point_rep = 3 * N_win_rep + N_draw_rep;
-  rank_rep = sort_indices_desc(N_point_rep);
+  rank_rep = get_rank(sort_indices_desc(N_point_rep));
 }
