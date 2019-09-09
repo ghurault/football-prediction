@@ -48,6 +48,46 @@ model {
 }
 
 generated quantities {
+  // Goals
   int home_goals_rep[N_games] = poisson_log_rng(home_pred);
   int away_goals_rep[N_games] =  poisson_log_rng(away_pred);
+  // Number of win/draw/lose
+  int N_win_home_rep[N_teams] = rep_vector(0, N_teams);
+  int N_win_away_rep[N_teams] = rep_vector(0, N_teams);
+  int N_win_rep[N_teams];
+  int N_draw_home_rep[N_teams] = rep_vector(0, N_teams);
+  int N_draw_away_rep[N_teams] = rep_vector(0, N_teams);
+  int N_draw_rep[N_teams];
+  int N_lose_home_rep[N_teams] = rep_vector(0, N_teams);
+  int N_lose_away_rep[N_teams] = rep_vector(0, N_teams);
+  int N_lose_rep[N_teams];
+  // Number of goals
+  int N_goal_home_rep[N_teams] = rep_vector(0, N_teams);
+  int N_goal_away_rep[N_teams] = rep_vector(0, N_teams);
+  int N_goal_rep[N_teams];
+  // Number of points
+  int N_point_rep[N_teams];
+  // Rank
+  int rank_rep[N_teams];
+  
+  for (i in 1:N_games) {
+    N_goal_home_rep[home_id[i]] += home_goals_rep[i];
+    N_goal_away_rep[away_id[i]] += away_goals_rep[i];
+    if (home_goals_rep[i] > away_goals_rep[i]) {
+      N_win_home_rep[home_id[i]] += 1;
+      N_lose_away_rep[away_id[i]] += 1;
+    } else if (home_goals_rep[i] == away_goals_rep[i]) {
+      N_draw_home_rep[home_id[i]] += 1;
+      N_draw_away_rep[away_id[i]] += 1;
+    } else {
+      N_lose_home_rep[home_id[i]] += 1;
+      N_win_away_rep[away_id[i]] += 1;
+    }
+  }
+  N_win_rep = N_win_home_rep + N_win_away_rep;
+  N_draw_rep = N_draw_home_rep + N_draw_away_rep;
+  N_lose_rep = N_lose_home_rep + N_lose_away_rep;
+  N_goal_rep = N_goal_home_rep + N_goal_away_rep;
+  N_point_rep = 3 * N_win_rep + N_draw_rep;
+  rank_rep = sort_indices_desc(N_point_rep);
 }
