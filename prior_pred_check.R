@@ -19,8 +19,8 @@ library(rstan)
 rstan_options(auto_write = TRUE) # Save compiled model
 options(mc.cores = parallel::detectCores()) # Parallel computing
 
-run_prior <- TRUE
-run_fake <- TRUE
+run_prior <- FALSE
+run_fake <- FALSE
 
 stan_code <- "Model/mdl1.stan"
 
@@ -32,11 +32,13 @@ n_it <- 2000
 
 param_pop <- c("b", "home_advantage", "sigma_ability")
 param_ind <- c("attack", "defence",
-               "N_win_home_rep", "N_win_away_rep", "N_win_rep",
-               "N_draw_home_rep", "N_draw_away_rep", "N_draw_rep",
-               "N_lose_home_rep", "N_lose_away_rep", "N_lose_rep",
-               "N_goal_home_rep", "N_goal_away_rep", "N_goal_rep",
-               "N_point_rep", "rank_rep")
+               # "win_home_rep", "win_away_rep",
+               # "draw_home_rep", "draw_away_rep",
+               # "lose_home_rep", "lose_away_rep",
+               # "goal_home_rep", "goal_away_rep",
+               # "goal_diff_home_rep", "goal_diff_away_rep",
+               "win_rep", "draw_rep", "lose_rep",
+               "goal_rep", "goal_diff_rep", "point_rep")
 param_obs <- c("home_goals_rep", "away_goals_rep")
 param <- c(param_pop, param_ind, param_obs)
 
@@ -162,38 +164,18 @@ if (FALSE) {
   plot(fit_fake, pars = param_pop, plotfun = "trace")
   
   print(fit_fake, pars = param_pop)
+  par_fake <- extract_parameters(fit_fake, param, param_ind, param_obs, teams, data_stan)
   
   ## Can we retrieve parameters?
-  par_fake <- extract_parameters(fit_fake, param, param_ind, param_obs, teams, data_stan)
-  tmp <- merge(subset(par_fake, Variable %in% c(param_pop, param_ind)),
-               true_param,
-               by = c("Variable", "Team"))
-  # Population parameters
-  ggplot(data = subset(tmp, Variable %in% param_pop),
-         aes(x = Variable)) +
-    geom_pointrange(aes(y = Mean, ymin = `5%`, ymax = `95%`)) +
-    geom_point(aes(y = True), col = "#E69F00", size = 2) +
-    coord_flip() +
-    labs(x = "", y = "Estimate") +
-    theme_bw(base_size = 20)
-  # Team parameters
-  lapply(param_ind[1:2],
-         function(par_name) {
-           
-           library(ggplot2)
-           
-           a <- subset(tmp, Variable == par_name)
-           a$Team <- factor(a$Team, levels = a$Team[order(a$True)]) # order by true value
-           
-           ggplot(data = a, aes(x = Team)) +
-             geom_pointrange(aes(y = Mean, ymin = `5%`, ymax = `95%`)) +
-             geom_point(aes(y = True), col = "#E69F00", size = 2) +
-             coord_flip() +
-             labs(y = par_name) +
-             theme_bw(base_size = 15)
-         })
+  check_estimates(par_fake, true_param, param_pop, param_ind[1:2])
   
   ## Posterior predictive checks
+  stackhist_rank(compute_rank(fit_fake), teams) # Probability that given team achieve has such position in ranking
+  
+  # Next, plot football statistics replications probability against true value for each team
+  
+  
+  
   
   home_goals <- extract(fit_fake, pars = "home_goals_rep")[[1]]
   away_goals <- extract(fit_fake, pars = "away_goals_rep")[[1]]
