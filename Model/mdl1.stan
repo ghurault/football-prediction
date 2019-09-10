@@ -63,42 +63,46 @@ generated quantities {
   int home_goals_rep[N_games] = poisson_log_rng(home_pred);
   int away_goals_rep[N_games] =  poisson_log_rng(away_pred);
   // Number of win/draw/lose
-  vector[N_teams] N_win_home_rep = rep_vector(0, N_teams);
-  vector[N_teams] N_win_away_rep = rep_vector(0, N_teams);
-  vector[N_teams] N_win_rep;
-  vector[N_teams] N_draw_home_rep = rep_vector(0, N_teams);
-  vector[N_teams] N_draw_away_rep = rep_vector(0, N_teams);
-  vector[N_teams] N_draw_rep;
-  vector[N_teams] N_lose_home_rep = rep_vector(0, N_teams);
-  vector[N_teams] N_lose_away_rep = rep_vector(0, N_teams);
-  vector[N_teams] N_lose_rep;
+  vector[N_teams] win_home_rep = rep_vector(0, N_teams);
+  vector[N_teams] win_away_rep = rep_vector(0, N_teams);
+  vector[N_teams] win_rep;
+  vector[N_teams] draw_home_rep = rep_vector(0, N_teams);
+  vector[N_teams] draw_away_rep = rep_vector(0, N_teams);
+  vector[N_teams] draw_rep;
+  vector[N_teams] lose_home_rep = rep_vector(0, N_teams);
+  vector[N_teams] lose_away_rep = rep_vector(0, N_teams);
+  vector[N_teams] lose_rep;
   // Number of goals
-  vector[N_teams] N_goal_home_rep = rep_vector(0, N_teams);
-  vector[N_teams] N_goal_away_rep = rep_vector(0, N_teams);
-  vector[N_teams] N_goal_rep;
+  vector[N_teams] goal_home_rep = rep_vector(0, N_teams);
+  vector[N_teams] goal_away_rep = rep_vector(0, N_teams);
+  vector[N_teams] goal_rep;
+  // Goal difference (scored - conceded)
+  vector[N_teams] goal_diff_home_rep = rep_vector(0, N_teams);
+  vector[N_teams] goal_diff_away_rep = rep_vector(0, N_teams);
+  vector[N_teams] goal_diff_rep;
   // Number of points
-  vector[N_teams] N_point_rep;
-  // Rank
-  int rank_rep[N_teams];
+  vector[N_teams] point_rep;
   
   for (i in 1:N_games) {
-    N_goal_home_rep[home_id[i]] += home_goals_rep[i];
-    N_goal_away_rep[away_id[i]] += away_goals_rep[i];
+    goal_home_rep[home_id[i]] += home_goals_rep[i];
+    goal_away_rep[away_id[i]] += away_goals_rep[i];
+    goal_diff_home_rep[home_id[i]] += home_goals_rep[i] - away_goals_rep[i];
+    goal_diff_away_rep[home_id[i]] += away_goals_rep[i] - home_goals_rep[i];
     if (home_goals_rep[i] > away_goals_rep[i]) {
-      N_win_home_rep[home_id[i]] += 1;
-      N_lose_away_rep[away_id[i]] += 1;
+      win_home_rep[home_id[i]] += 1;
+      lose_away_rep[away_id[i]] += 1;
     } else if (home_goals_rep[i] == away_goals_rep[i]) {
-      N_draw_home_rep[home_id[i]] += 1;
-      N_draw_away_rep[away_id[i]] += 1;
+      draw_home_rep[home_id[i]] += 1;
+      draw_away_rep[away_id[i]] += 1;
     } else {
-      N_lose_home_rep[home_id[i]] += 1;
-      N_win_away_rep[away_id[i]] += 1;
+      lose_home_rep[home_id[i]] += 1;
+      win_away_rep[away_id[i]] += 1;
     }
   }
-  N_win_rep = N_win_home_rep + N_win_away_rep;
-  N_draw_rep = N_draw_home_rep + N_draw_away_rep;
-  N_lose_rep = N_lose_home_rep + N_lose_away_rep;
-  N_goal_rep = N_goal_home_rep + N_goal_away_rep;
-  N_point_rep = 3 * N_win_rep + N_draw_rep;
-  rank_rep = get_rank(sort_indices_desc(N_point_rep));
+  win_rep = win_home_rep + win_away_rep;
+  draw_rep = draw_home_rep + draw_away_rep;
+  lose_rep = lose_home_rep + lose_away_rep;
+  goal_rep = goal_home_rep + goal_away_rep;
+  goal_diff_rep = goal_diff_home_rep + goal_diff_away_rep;
+  point_rep = 3 * win_rep + draw_rep;
 }
