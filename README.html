@@ -389,7 +389,7 @@ Include “test” in generated quantities: have a vector of all possibles games
 <li><input type="checkbox" disabled></input>
 Evaluate model in forward chaining</li>
 <li><input type="checkbox" disabled></input>
-Evaluate model with (cumulative?) LogLoss, calibration curves, lift curves</li>
+Evaluate model with LogLoss (not cumulative, don’t care about that for betting), calibration curves, lift curves</li>
 <li></li>
 </ul>
 </div>
@@ -403,13 +403,28 @@ Model half-time goals (i.e. double the data)</li>
 <li><input type="checkbox" disabled></input>
 Different sigmas for attack and defence?</li>
 <li><input type="checkbox" disabled></input>
-Parametrisation with total ability and proportion of attack/defence (convenient if model feedback after half time)?</li>
+If probability of draw underconfident (or underestimate 0 goals), could use zero-inflated model or activation function for (attack - defence) (pool toward 0, useful if probabily of draw underconfident)</li>
 <li><input type="checkbox" disabled></input>
 Exponential smoothing or Random walk to allow abilities to change</li>
 <li><input type="checkbox" disabled></input>
+Parametrisation with total ability and proportion of attack/defence (convenient if model feedback after half time)?</li>
+<li><input type="checkbox" disabled></input>
 Variability in home advantage: home team dependent? Can potentially interact with away team (some team might less susceptible to be affected by “away” disadvantage), something like <code>HomeAdvantage * AwaySusceptibility</code>.</li>
+<li><input type="checkbox" disabled></input>
+Prior abilities as data to leverage knowledge from previous seasons (not ideal but might be sufficient)?</li>
 <li></li>
 </ul>
+<p>Example activation function:</p>
+<pre><code>inv_logit &lt;- function(x) {1 / (1 + exp(-x))}
+slp &lt;- 1 # slope at midpoint
+inf &lt;- 5 # inflexion point
+a &lt;- 4 * slp # slope
+b &lt;- -4 * slp * inf - 2 # intercept
+
+x &lt;- seq(-10, 10, .01)
+plot(x, (inv_logit(a * x + b) + inv_logit(-a * x + b)) * x, type = &quot;l&quot;)
+abline(c(0, 1), col = &quot;red&quot;)
+abline(c(0, 0), col = &quot;red&quot;)</code></pre>
 </div>
 </div>
 <div id="notes" class="section level2">
