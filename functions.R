@@ -159,7 +159,7 @@ compute_rank <- function(fit) {
            }))
 }
 
-# Results' visualisation ----------------------------------------
+# Fake data check ----------------------------------------
 
 check_estimates <- function(par, true_param, param_pop, param_ind) {
   # Plot estimates versus true values
@@ -178,6 +178,7 @@ check_estimates <- function(par, true_param, param_pop, param_ind) {
   tmp <- merge(subset(par, Variable %in% c(param_pop, param_ind)),
                true_param,
                by = c("Variable", "Team"))
+  # with(tmp, mean(True > `5%` & Mean < `95%`)) # Proportion of true values in 90% CI
   
   # Population parameters
   p1 <- ggplot(data = subset(tmp, Variable %in% param_pop),
@@ -205,6 +206,92 @@ check_estimates <- function(par, true_param, param_pop, param_ind) {
                })
   
   return(c(list(p1), pl))
+}
+
+# Analyse posterior ---------------------------------------------
+
+plot_prior_posterior <- function(par, par0, param) {
+  # Plot posterior estimates alongside prior estimates
+  #
+  # Args:
+  # par: Dataframe of posterior parameter estimates
+  # par0: Dataframe of prior parameter estimates
+  # param: Vector of parameter names to plot
+  #
+  # Returns:
+  # Ggplot
+  
+  library(ggplot2)
+  
+  par <- subset(par, Variable %in% param)
+  par$Distribution <- "Posterior"
+  par0 <- subset(par0, Variable %in% param)
+  par0$Distribution <- "Prior"
+  tmp <- rbind(par, par0)
+  tmp$Distribution <- factor(tmp$Distribution, levels = c("Prior", "Posterior")) # to show posterior on top
+  
+  ggplot(data = tmp, aes(x = Variable, y = Mean, ymin = `5%`, ymax = `95%`, colour = Distribution)) +
+    geom_pointrange(position = position_dodge2(width = .3), size = 1.2) +
+    scale_colour_manual(values = c("#E69F00", "#000000")) +
+    coord_flip() +
+    labs(colour = "", x = "", y = "Estimate") +
+    theme_bw(base_size = 20) +
+    theme(legend.position = "top")
+}
+
+PPC_football_stats <- function(fit, stat_name, fstats, teams, order = FALSE) {
+  # Plot posterior predictive checks of some football statistics (number of something)
+  #
+  # Args:
+  # fit: stanfit object
+  # stat_name: name of the statistics to show (without suffix _rep)
+  # fstats: Dataframe of observed football statistics
+  # teams: vector of team names (in the same order as in the model)
+  # order: whether to order team by the observed statistics
+  #
+  # Returns:
+  # Ggplot
+  
+  library(ggplot2)
+  
+  if (stat_name != "rank") {
+    tmp <- rstan::extract(fit, pars = paste(stat_name, "_rep", sep = ""))[[1]]
+  } else {
+    tmp <- compute_rank(fit)
+  }
+  
+  n_teams <- length(teams)
+  n_min <- round(min(0, min(tmp)))
+  n_max <- round(max(0, max(tmp) * 1.1))
+  # Compute probability table from posterior samples
+  out <- do.call(rbind,
+                 lapply(1:n_teams,
+                        function(i) {
+                          p <- table(factor(tmp[, i], levels = 0:n_max)) / nrow(tmp)
+                          data.frame(Team = teams[i],
+                                     N = as.numeric(names(p)),
+                                     Probability = as.numeric(p),
+                                     Statistic = "p",
+                                     Actual = FALSE)
+                        }))
+  
+  # Fill actual column with observed value of statistics
+  for (i in 1:n_teams) {
+    out$Actual[out$Team == teams[i] & out$N == subset(fstats, Team == teams[i])[[stat_name]]] <- TRUE
+  }
+  
+  # Order teams by observed football statistics
+  if (order) {
+    out$Team <- factor(out$Team, levels = teams[order(fstats[[stat_name]])])
+  }
+  
+  ggplot(data = out, aes(x = N, y = Probability, fill = Actual)) +
+    scale_fill_manual(values = c("#000000", "#E69F00")) +
+    geom_bar(stat = "identity") +
+    facet_grid(rows = vars(Team)) +
+    labs(x = stat_name) +
+    theme_bw(base_size = 15) +
+    theme(legend.position = "none")
 }
 
 stackhist_rank <- function(rank_rep, teams) {
