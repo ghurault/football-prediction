@@ -2,8 +2,6 @@
 
 # Probably need to adjust some priors
 
-# Write functions for model checking and posterior predictive checks
-
 # Initialisation ----------------------------------------------------------
 
 rm(list = ls())
@@ -19,8 +17,8 @@ library(rstan)
 rstan_options(auto_write = TRUE) # Save compiled model
 options(mc.cores = parallel::detectCores()) # Parallel computing
 
-run_prior <- FALSE
-run_fake <- FALSE
+run_prior <- TRUE
+run_fake <- TRUE
 
 stan_code <- "Model/mdl1.stan"
 
@@ -69,14 +67,14 @@ if (run_prior) {
 }
 
 # shinystan::launch_shinystan(fit_prior)
-
+par_prior <- extract_parameters(fit_prior, param, param_ind, param_obs, teams, data_stan)
 # pairs(fit_prior, pars = param_pop)
 # plot(fit_prior, pars = param_pop, plotfun = "trace")
 
 # Prior predictive check ---------------------------------------------------------------
 
 if (FALSE) {
-  
+
   plot(fit_prior, pars = c(param_pop, paste(param_ind[1:2], "[1]", sep = "")), plotfun = "hist")
   
   # Exponentiate abilities
@@ -91,13 +89,14 @@ if (FALSE) {
   summary(goals)
   hist(goals, breaks = 40)
   hist(goals[goals < 20], breaks = 20)
+  quantile(goals, probs = c(.25, .5 , .75, .9, .99, .999))
   mean(goals >= 20) # proportion of games with home/away goals greater than 20
   
 }
 
 # Generate fake data ------------------------------------------------------
 
-draw <- 2019
+draw <- 2019 # 2019
 
 # True parameters
 true_param_pop <- lapply(extract(fit_prior, pars = param_pop), function(x) {x[draw]})
@@ -160,72 +159,35 @@ if (FALSE) {
   
   # shinystan::launch_shinystan(fit_fake)
   
+  check_hmc_diagnostics(fit_fake)
   pairs(fit_fake, pars = param_pop)
   plot(fit_fake, pars = param_pop, plotfun = "trace")
   
   print(fit_fake, pars = param_pop)
   par_fake <- extract_parameters(fit_fake, param, param_ind, param_obs, teams, data_stan)
   
+  # Compare prior to posterior
+  plot_prior_posterior(par_fake, par_prior, param_pop)
+  
   ## Can we retrieve parameters?
   check_estimates(par_fake, true_param, param_pop, param_ind[1:2])
   
-  ## Posterior predictive checks
-  stackhist_rank(compute_rank(fit_fake), teams) # Probability that given team achieve has such position in ranking
+  # Posterior predictive checks
+  PPC_football_stats(fit_fake, "win", fstats, teams)
+  PPC_football_stats(fit_fake, "lose", fstats, teams)
+  PPC_football_stats(fit_fake, "goal", fstats, teams)
+  PPC_football_stats(fit_fake, "point", fstats, teams)
+  PPC_football_stats(fit_fake, "rank", fstats, teams, order = TRUE)
   
-  # Next, plot football statistics replications probability against true value for each team
+  # Posterior rank
+  stackhist_rank(compute_rank(fit_fake), teams)
   
-  
-  
-  
+  # Posterior win probability
   home_goals <- extract(fit_fake, pars = "home_goals_rep")[[1]]
   away_goals <- extract(fit_fake, pars = "away_goals_rep")[[1]]
-  
-  # Win probabilities
   fd$HomeWinProb <- apply(home_goals - away_goals, 2, function(x) {mean(x > 0)})
   fd$AwayWinProb <- apply(home_goals - away_goals, 2, function(x) {mean(x < 0)})
   fd$DrawProb <- apply(home_goals - away_goals, 2, function(x) {mean(x == 0)})
-  
-  # Probability that given team win x games
-  wins <- do.call(rbind,
-                  lapply(teams,
-                         function(teamName) {
-                           tmp <- cbind(
-                             (home_goals - away_goals)[, fd$Game[fd$HomeTeam == teamName]],
-                             (away_goals - home_goals)[, fd$Game[fd$AwayTeam == teamName]]
-                           )
-                           n_wins <- apply(tmp, 1, function(x) {sum(x > 0)})
-                           prob_wins <- table(factor(n_wins, levels = 0:(2 * (n_teams - 1)))) / length(n_wins)
-                           data.frame(Team = teamName,
-                                      NumberWins = as.numeric(names(prob_wins)),
-                                      Probability = as.numeric(prob_wins))
-                         }))
-  # Observed number of wins
-  wins$Actual <- FALSE
-  act <- sapply(teams,
-         function(teamName) {
-           nrow(subset(fd, (HomeTeam == teamName & FTR == "H") |
-                         (AwayTeam == teamName & FTR == "A")))
-         })
-  for (i in 1:length(act)) {
-    wins$Actual[wins$Team == names(act)[i] & wins$NumberWins == as.numeric(act[i])] <- TRUE
-  }
-  
-  # Order team by mode
-  a <- sapply(teams,
-         function(teamName) {
-           tmp <- subset(wins, Team == teamName)
-           tmp$NumberWins[which.max(tmp$Probability)]
-         })
-  wins$Team <- factor(wins$Team, levels = names(sort(a)))
-  
-  # Number of wins probability (and true value in colour)
-  ggplot(data = wins,
-         aes(x = NumberWins, y = Probability, fill = Actual)) +
-    scale_fill_manual(values = c("#000000", "#E69F00")) +
-    geom_bar(stat = "identity") +
-    facet_grid(rows = vars(Team)) +
-    theme_bw(base_size = 15) +
-    theme(legend.position = "none")
-  
+
 }
 
