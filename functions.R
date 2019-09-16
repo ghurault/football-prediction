@@ -64,11 +64,11 @@ football_stats <- function(df) {
                         with(subset(df, AwayTeam == teamName), sum(FTR ==  "H"))
                       })
   # Goal
-  goal_home <- sapply(teams,
+  goal_tot_home <- sapply(teams,
                       function(teamName) {
                         with(subset(df, HomeTeam == teamName), sum(FTHG))
                       })
-  goal_away <- sapply(teams,
+  goal_tot_away <- sapply(teams,
                       function(teamName) {
                         with(subset(df, AwayTeam == teamName), sum(FTAG))
                       })
@@ -86,7 +86,7 @@ football_stats <- function(df) {
   win <- win_home + win_away
   draw <- draw_home + draw_away
   lose <- lose_home + lose_away
-  goal <- goal_home + goal_away
+  goal_tot <- goal_tot_home + goal_tot_away
   goal_diff <- goal_diff_home + goal_diff_away
   point <- 3 * win + draw
   
@@ -94,7 +94,7 @@ football_stats <- function(df) {
                     win_home, win_away, win,
                     draw_home, draw_away, draw,
                     lose_home, lose_away, lose,
-                    goal_home, goal_away, goal,
+                    goal_tot_home, goal_tot_away, goal_tot,
                     goal_diff, point)
   out <- merge(out,
                data.frame(Team = teams[order(point, goal_diff, decreasing = TRUE)],
