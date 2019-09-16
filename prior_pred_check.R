@@ -17,32 +17,45 @@ library(rstan)
 rstan_options(auto_write = TRUE) # Save compiled model
 options(mc.cores = parallel::detectCores()) # Parallel computing
 
-run_prior <- TRUE
-run_fake <- TRUE
+run_prior <- FALSE
+run_fake <- FALSE
+run_pred <- FALSE
 
 stan_code <- "Model/mdl1.stan"
 
 prior_file <- "Results/prior_mdl1.rds"
 fake_file <- "Results/fake_mdl1.rds"
+pred_file <- "Results/fake_pred_mdl1.rds"
 
 n_chains <- 4
 n_it <- 2000
 
 param_pop <- c("b", "home_advantage", "sigma_ability")
-param_ind <- c("attack", "defence",
-               # "win_home_rep", "win_away_rep",
-               # "draw_home_rep", "draw_away_rep",
-               # "lose_home_rep", "lose_away_rep",
-               # "goal_home_rep", "goal_away_rep",
-               # "goal_diff_home_rep", "goal_diff_away_rep",
-               "win_rep", "draw_rep", "lose_rep",
-               "goal_rep", "goal_diff_rep", "point_rep")
+param_rep <- c(
+  # "win_home_rep", "win_away_rep",
+  # "draw_home_rep", "draw_away_rep",
+  # "lose_home_rep", "lose_away_rep",
+  # "goal_tot_home_rep", "goal_tot_away_rep",
+  # "goal_diff_home_rep", "goal_diff_away_rep",
+  "win_rep", "draw_rep", "lose_rep",
+  "goal_tot_rep", "goal_diff_rep", "point_rep"
+  )
+param_test <- c(
+  # "win_home_test", "win_away_test",
+  # "draw_home_test", "draw_away_test",
+  # "lose_home_test", "lose_away_test",
+  # "goal_tot_home_test", "goal_tot_away_test",
+  # "goal_diff_home_rep", "goal_diff_away_test",
+  "win_test", "draw_test", "lose_test",
+  "goal_tot_test", "goal_diff_test", "point_test"
+)
+param_ind <- c("attack", "defence", param_rep)
 param_obs <- c("home_goals_rep", "away_goals_rep")
-param <- c(param_pop, param_ind, param_obs)
+param <- c(param_pop, param_ind, param_obs) # "home_goals_test", "away_goals_test"
 
 # Simulate from prior ----------------------------------------------------------
 
-n_teams <- 10
+n_teams <- 20
 teams <- LETTERS[1:n_teams]
 
 id <- expand.grid(Home = 1:n_teams, Away = 1:n_teams)
@@ -74,7 +87,7 @@ par_prior <- extract_parameters(fit_prior, param, param_ind, param_obs, teams, d
 # Prior predictive check ---------------------------------------------------------------
 
 if (FALSE) {
-
+  
   plot(fit_prior, pars = c(param_pop, paste(param_ind[1:2], "[1]", sep = "")), plotfun = "hist")
   
   # Exponentiate abilities
@@ -96,7 +109,7 @@ if (FALSE) {
 
 # Generate fake data ------------------------------------------------------
 
-draw <- 2019 # 2019
+draw <- 2019 #
 
 # True parameters
 true_param_pop <- lapply(extract(fit_prior, pars = param_pop), function(x) {x[draw]})
@@ -169,7 +182,7 @@ if (FALSE) {
   # Compare prior to posterior
   plot_prior_posterior(par_fake, par_prior, param_pop)
   
-  ## Can we retrieve parameters?
+  # Can we retrieve parameters?
   check_estimates(par_fake, true_param, param_pop, param_ind[1:2])
   
   # Posterior predictive checks
@@ -188,6 +201,54 @@ if (FALSE) {
   fd$HomeWinProb <- apply(home_goals - away_goals, 2, function(x) {mean(x > 0)})
   fd$AwayWinProb <- apply(home_goals - away_goals, 2, function(x) {mean(x < 0)})
   fd$DrawProb <- apply(home_goals - away_goals, 2, function(x) {mean(x == 0)})
+  
+}
 
+# Fit fake data to test predictions ---------------------------------------
+
+fd_train <- fd[1:round(nrow(fd) * 0.7), ]
+
+data_pred <- list(
+  N_teams = n_teams,
+  N_games = nrow(fd_train),
+  home_goals = fd_train$FTHG,
+  away_goals = fd_train$FTAG,
+  home_id = sapply(fd_train[["HomeTeam"]], function(x) {which(x == teams)}),
+  away_id = sapply(fd_train[["AwayTeam"]], function(x) {which(x == teams)}),
+  run = 1
+)
+
+param_ind <- c("attack", "defence", param_test)
+param_obs <- c()
+param <- c(param_pop, param_ind, param_obs, "home_goals_test", "away_goals_test")
+
+if (run_pred) {
+  fit_pred <- stan(file = stan_code, data = data_pred, pars = param,
+                   iter = n_it, chains = n_chains, seed = seed)
+  saveRDS(fit_pred, file = pred_file)
+} else {
+  fit_pred <- readRDS(pred_file)
+}
+
+# Check model and evaluate predictions ------------------------------------
+
+if (FALSE) {
+  
+  # shinystan::launch_shinystan(fit_pred)
+  
+  check_hmc_diagnostics(fit_pred)
+  pairs(fit_pred, pars = param_pop)
+  plot(fit_pred, pars = param_pop, plotfun = "trace")
+  
+  print(fit_pred, pars = param_pop)
+  par_pred <- extract_parameters(fit_pred, param, param_ind, param_obs, teams, data_stan)
+  
+  # Compare prior to posterior
+  plot_prior_posterior(par_pred, par_prior, param_pop)
+  
+  # Evaluate predictions
+  # Performance and visualise stats predictions
+  
+  
 }
 
