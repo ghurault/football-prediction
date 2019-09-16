@@ -1,26 +1,45 @@
 // Poisson model with constant attack/defence abilities and constant home advantage
-// "_train" suffix to denote training data
-// "_rep" suffix to denote replications (on train) data
-// "_test" suffix to denote testing data (and predicted goals)
-// "_pred" suffix to denote combined observed (train) and predicted (test) data
+
+functions {
+  int get_test_id(int ht, int at, int nt) {
+    // Get row id for test variables ordered by home team then away team
+    //
+    // Args:
+    // ht: home team id
+    // at: away team id
+    // nt: number of teams
+    //
+    // Returns:
+    // Corresponding id in test
+    
+    int out = (ht - 1) * (nt - 1) + at;
+    if (at > ht) {
+      out = out - 1;
+    }
+    return out;
+  }
+}
 
 data {
   int<lower = 0> N_teams; // Number of teams
-  // Training
-  int<lower = 0> N_games_train; // Number of games
-  int<lower = 0> home_goals_train[N_games_train]; // Number of goals scored by home team
-  int<lower = 0> away_goals_train[N_games_train]; // Number of goals scored by away team
-  int<lower = 1, upper = N_teams> home_id_train[N_games_train]; // ID of home team
-  int<lower = 1, upper = N_teams> away_id_train[N_games_train]; // ID of away team
+  int<lower = 0> N_games; // Number of games
+  
+  int<lower = 0> home_goals[N_games]; // Number of goals scored by home team
+  int<lower = 0> away_goals[N_games]; // Number of goals scored by away team
+  int<lower = 1, upper = N_teams> home_id[N_games]; // ID of home team
+  int<lower = 1, upper = N_teams> away_id[N_games]; // ID of away team
+  
   int<lower = 0, upper = 1> run; // Switch for inference
-  // Testing
-  int<lower = 0, upper = N_teams * (N_teams - 1) - N_games_train> N_games_test; // Number of games to predict
-  int<lower = 1, upper = N_teams> home_id_test[N_games_test]; // ID of home team
-  int<lower = 1, upper = N_teams> away_id_test[N_games_test]; // ID of away team
 }
 
 transformed data {
   int N = N_teams * (N_teams - 1); // Total number of games
+  int is_played[N] = rep_array(0, N); // Array indicating whether a game has been played
+  
+  for (i in 1:N_games) {
+    is_played[get_test_id(home_id[i], away_id[i], N_teams)] = 1;
+  }
+  
 }
 
 parameters {
@@ -32,14 +51,14 @@ parameters {
 }
 
 transformed parameters {
-  vector[N_games_train] home_pred = b +
+  vector[N_games] home_pred = b +
   home_advantage +
-  attack[home_id_train] -
-  defence[away_id_train]; // Log rate of goals for home team
+  attack[home_id] -
+  defence[away_id]; // Log rate of goals for home team
   
-  vector[N_games_train] away_pred = b +
-  attack[away_id_train] -
-  defence[home_id_train]; // Log rate of goals for away team
+  vector[N_games] away_pred = b +
+  attack[away_id] -
+  defence[home_id]; // Log rate of goals for away team
 }
 
 model {
@@ -52,8 +71,8 @@ model {
   
   // Likelihood
   if (run == 1) {
-    home_goals_train ~ poisson_log(home_pred);
-    away_goals_train ~ poisson_log(away_pred);
+    home_goals ~ poisson_log(home_pred);
+    away_goals ~ poisson_log(away_pred);
   }
   
 }
@@ -61,8 +80,8 @@ model {
 generated quantities {
   // REPLICATIONS
   // Goals
-  int home_goals_rep[N_games_train] = poisson_log_rng(home_pred);
-  int away_goals_rep[N_games_train] =  poisson_log_rng(away_pred);
+  int home_goals_rep[N_games] = poisson_log_rng(home_pred);
+  int away_goals_rep[N_games] =  poisson_log_rng(away_pred);
   // Number of win/draw/lose
   vector[N_teams] win_home_rep = rep_vector(0, N_teams);
   vector[N_teams] win_away_rep = rep_vector(0, N_teams);
@@ -73,113 +92,112 @@ generated quantities {
   vector[N_teams] lose_home_rep = rep_vector(0, N_teams);
   vector[N_teams] lose_away_rep = rep_vector(0, N_teams);
   vector[N_teams] lose_rep;
-  // Number of goals
-  vector[N_teams] goal_home_rep = rep_vector(0, N_teams);
-  vector[N_teams] goal_away_rep = rep_vector(0, N_teams);
-  vector[N_teams] goal_rep;
+  // Total number of goals
+  vector[N_teams] goal_tot_home_rep = rep_vector(0, N_teams);
+  vector[N_teams] goal_tot_away_rep = rep_vector(0, N_teams);
+  vector[N_teams] goal_tot_rep;
   // Goal difference (scored - conceded)
   vector[N_teams] goal_diff_home_rep = rep_vector(0, N_teams);
   vector[N_teams] goal_diff_away_rep = rep_vector(0, N_teams);
   vector[N_teams] goal_diff_rep;
   // Number of points
   vector[N_teams] point_rep;
+  
   // TEST
-  int home_goals_test[N_games_test];
-  int away_goals_test[N_games_test];
-  // PREDICTIONS
-  int home_goals_pred[N]; // First N_games element correspond to played games, then correspond to home_test_id
-  int away_goals_pred[N];
+  int home_goals_test[N];
+  int away_goals_test[N];
   // Number of wins/lose/draws
-  vector[N_teams] win_home_pred = rep_vector(0, N_teams);
-  vector[N_teams] win_away_pred = rep_vector(0, N_teams);
-  vector[N_teams] win_pred;
-  vector[N_teams] draw_home_pred = rep_vector(0, N_teams);
-  vector[N_teams] draw_away_pred = rep_vector(0, N_teams);
-  vector[N_teams] draw_pred;
-  vector[N_teams] lose_home_pred = rep_vector(0, N_teams);
-  vector[N_teams] lose_away_pred = rep_vector(0, N_teams);
-  vector[N_teams] lose_pred;
+  vector[N_teams] win_home_test = rep_vector(0, N_teams);
+  vector[N_teams] win_away_test = rep_vector(0, N_teams);
+  vector[N_teams] win_test;
+  vector[N_teams] draw_home_test = rep_vector(0, N_teams);
+  vector[N_teams] draw_away_test = rep_vector(0, N_teams);
+  vector[N_teams] draw_test;
+  vector[N_teams] lose_home_test = rep_vector(0, N_teams);
+  vector[N_teams] lose_away_test = rep_vector(0, N_teams);
+  vector[N_teams] lose_test;
   // Number of goals
-  vector[N_teams] goal_home_pred = rep_vector(0, N_teams);
-  vector[N_teams] goal_away_pred = rep_vector(0, N_teams);
-  vector[N_teams] goal_pred;
+  vector[N_teams] goal_tot_home_test = rep_vector(0, N_teams);
+  vector[N_teams] goal_tot_away_test = rep_vector(0, N_teams);
+  vector[N_teams] goal_tot_test;
   // Goal difference (scored - conceded)
-  vector[N_teams] goal_diff_home_pred = rep_vector(0, N_teams);
-  vector[N_teams] goal_diff_away_pred = rep_vector(0, N_teams);
-  vector[N_teams] goal_diff_pred;
+  vector[N_teams] goal_diff_home_test = rep_vector(0, N_teams);
+  vector[N_teams] goal_diff_away_test = rep_vector(0, N_teams);
+  vector[N_teams] goal_diff_test;
   // Number of points
-  vector[N_teams] point_pred;
+  vector[N_teams] point_test;
   
   // REPLICATIONS
-  for (i in 1:N_games_train) {
-    goal_home_rep[home_id_train[i]] += home_goals_rep[i];
-    goal_away_rep[away_id_train[i]] += away_goals_rep[i];
-    goal_diff_home_rep[home_id_train[i]] += home_goals_rep[i] - away_goals_rep[i];
-    goal_diff_away_rep[home_id_train[i]] += away_goals_rep[i] - home_goals_rep[i];
+  for (i in 1:N_games) {
+    goal_tot_home_rep[home_id[i]] += home_goals_rep[i];
+    goal_tot_away_rep[away_id[i]] += away_goals_rep[i];
+    goal_diff_home_rep[home_id[i]] += home_goals_rep[i] - away_goals_rep[i];
+    goal_diff_away_rep[home_id[i]] += away_goals_rep[i] - home_goals_rep[i];
     if (home_goals_rep[i] > away_goals_rep[i]) {
-      win_home_rep[home_id_train[i]] += 1;
-      lose_away_rep[away_id_train[i]] += 1;
+      win_home_rep[home_id[i]] += 1;
+      lose_away_rep[away_id[i]] += 1;
     } else if (home_goals_rep[i] == away_goals_rep[i]) {
-      draw_home_rep[home_id_train[i]] += 1;
-      draw_away_rep[away_id_train[i]] += 1;
+      draw_home_rep[home_id[i]] += 1;
+      draw_away_rep[away_id[i]] += 1;
     } else {
-      lose_home_rep[home_id_train[i]] += 1;
-      win_away_rep[away_id_train[i]] += 1;
+      lose_home_rep[home_id[i]] += 1;
+      win_away_rep[away_id[i]] += 1;
     }
   }
   win_rep = win_home_rep + win_away_rep;
   draw_rep = draw_home_rep + draw_away_rep;
   lose_rep = lose_home_rep + lose_away_rep;
-  goal_rep = goal_home_rep + goal_away_rep;
+  goal_tot_rep = goal_tot_home_rep + goal_tot_away_rep;
   goal_diff_rep = goal_diff_home_rep + goal_diff_away_rep;
   point_rep = 3 * win_rep + draw_rep;
   
   // TEST
   {
-    int idx = 1; // Indexing test arrays
-    int ht;
-    int at;
-    real ht_pred;
-    real at_pred;
-    for (i in 1:N) {
-      if (i <= N_games_train) {
-        // Fill with already played games
-        ht = home_id_train[i];
-        at = away_id_train[i];
-        home_goals_test[i] = home_goals_train[i];
-        away_goals_test[i] = away_goals_train[i];
-      } else {
-        // Complete with predictions
-        ht = home_id_test[i - N_games_train];
-        at = away_id_test[i - N_games_train];
-        ht_pred = b + home_advantage + attack[ht] - defence[at];
-        at_pred = b + attack[at] - defence[ht];
-        home_goals_test[idx] = poisson_log_rng(ht_pred);
-        away_goals_test[idx] = poisson_log_rng(at_pred);
-      }
-      // Compute stats
-      goal_home_pred[ht] += home_goals_test[idx];
-      goal_away_pred[at] += away_goals_test[idx];
-      goal_diff_home_pred[ht] += home_goals_test[idx] - away_goals_test[idx];
-      goal_diff_away_pred[at] += away_goals_test[idx] - home_goals_test[idx];
-      if (home_goals_pred[idx] > away_goals_test[idx]) {
-        win_home_pred[ht] += 1;
-        lose_away_pred[at] += 1;
-      } else if (home_goals_test[idx] == away_goals_test[idx]) {
-        draw_home_pred[ht] += 1;
-        draw_away_pred[at] += 1;
-      } else {
-        win_away_pred[at] += 1;
-        lose_home_pred[ht] += 1;
-      }
-      idx += 1;
+    int id; // Test id
+    real ht_pred; // Linear predictor for home team
+    real at_pred; // Linear predictor for away team
+    for (g in 1:N_games) {
+      // Fill test goals with played games
+      id = get_test_id(home_id[g], away_id[g], N_teams);
+      home_goals_test[id] = home_goals[g];
+      away_goals_test[id] = away_goals[g];
     }
-    win_pred = win_home_pred + win_away_pred;
-    draw_pred = draw_home_pred + draw_away_pred;
-    lose_pred = lose_home_pred + lose_away_pred;
-    goal_pred = goal_home_pred + goal_away_pred;
-    goal_diff_pred = goal_diff_home_pred + goal_diff_away_pred;
-    point_pred = 3 * win_pred + draw_pred;
+    id = 1;
+    for (ht in 1:N_teams) {
+      for (at in 1:N_teams) {
+        if (ht != at) {
+          if (is_played[id] == 0) {
+            // Complete predictions
+            ht_pred = b + home_advantage + attack[ht] - defence[at];
+            at_pred = b + attack[at] - defence[ht];
+            home_goals_test[id] = poisson_log_rng(ht_pred);
+            away_goals_test[id] = poisson_log_rng(at_pred);
+          }
+          // Compute stats
+          goal_tot_home_test[ht] += home_goals_test[id];
+          goal_tot_away_test[at] += away_goals_test[id];
+          goal_diff_home_test[ht] += home_goals_test[id] - away_goals_test[id];
+          goal_diff_away_test[at] += away_goals_test[id] - home_goals_test[id];
+          if (home_goals_test[id] > away_goals_test[id]) {
+            win_home_test[ht] += 1;
+            lose_away_test[at] += 1;
+          } else if (home_goals_test[id] == away_goals_test[id]) {
+            draw_home_test[ht] += 1;
+            draw_away_test[at] += 1;
+          } else {
+            win_away_test[at] += 1;
+            lose_home_test[ht] += 1;
+          }
+          id += 1;
+        }
+      }
+    }
+    win_test = win_home_test + win_away_test;
+    draw_test = draw_home_test + draw_away_test;
+    lose_test = lose_home_test + lose_away_test;
+    goal_tot_test = goal_tot_home_test + goal_tot_away_test;
+    goal_diff_test = goal_diff_home_test + goal_diff_away_test;
+    point_test = 3 * win_test + draw_test;
   }
   
 }
