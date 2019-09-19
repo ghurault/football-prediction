@@ -51,14 +51,22 @@ parameters {
 }
 
 transformed parameters {
-  vector[N_games] home_pred = b +
-  home_advantage +
-  attack[home_id] -
-  defence[away_id]; // Log rate of goals for home team
+  // Define abilities for all possible gains, convenient because everything is defined only once
+  matrix[N_teams, N_teams] home_linpred;
+  matrix[N_teams, N_teams] away_linpred;
+  vector[N_games] home_linpred1;
+  vector[N_games] away_linpred1;
   
-  vector[N_games] away_pred = b +
-  attack[away_id] -
-  defence[home_id]; // Log rate of goals for away team
+  for (j in 1:N_teams) {
+    for (i in 1:N_teams) {
+      home_linpred[i, j] = b + home_advantage + attack[i] - defence[j];
+      away_linpred[i, j] = b + attack[j] - defence[i];
+    }
+  }
+  for (i in 1:N_games) {
+    home_linpred1[i] = home_linpred[home_id[i], away_id[i]];
+    away_linpred1[i] = away_linpred[home_id[i], away_id[i]];
+  }
 }
 
 model {
@@ -71,8 +79,8 @@ model {
   
   // Likelihood
   if (run == 1) {
-    home_goals ~ poisson_log(home_pred);
-    away_goals ~ poisson_log(away_pred);
+    home_goals ~ poisson_log(home_linpred1);
+    away_goals ~ poisson_log(away_linpred1);
   }
   
 }
@@ -80,8 +88,8 @@ model {
 generated quantities {
   // REPLICATIONS
   // Goals
-  int home_goals_rep[N_games] = poisson_log_rng(home_pred);
-  int away_goals_rep[N_games] =  poisson_log_rng(away_pred);
+  int home_goals_rep[N_games] = poisson_log_rng(home_linpred1);
+  int away_goals_rep[N_games] =  poisson_log_rng(away_linpred1);
   // Number of win/draw/lose
   vector[N_teams] win_home_rep = rep_vector(0, N_teams);
   vector[N_teams] win_away_rep = rep_vector(0, N_teams);
@@ -154,8 +162,6 @@ generated quantities {
   // TEST
   {
     int id; // Test id
-    real ht_pred; // Linear predictor for home team
-    real at_pred; // Linear predictor for away team
     for (g in 1:N_games) {
       // Fill test goals with played games
       id = get_test_id(home_id[g], away_id[g], N_teams);
@@ -168,10 +174,8 @@ generated quantities {
         if (ht != at) {
           if (is_played[id] == 0) {
             // Complete predictions
-            ht_pred = b + home_advantage + attack[ht] - defence[at];
-            at_pred = b + attack[at] - defence[ht];
-            home_goals_test[id] = poisson_log_rng(ht_pred);
-            away_goals_test[id] = poisson_log_rng(at_pred);
+            home_goals_test[id] = poisson_log_rng(home_linpred[ht, at]);
+            away_goals_test[id] = poisson_log_rng(away_linpred[ht, at]);
           }
           // Compute stats
           goal_tot_home_test[ht] += home_goals_test[id];
