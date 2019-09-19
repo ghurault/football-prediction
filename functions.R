@@ -138,17 +138,18 @@ extract_parameters <- function(fit, param, param_ind, param_obs, teams, data_sta
   return(par)
 }
 
-compute_rank <- function(fit) {
-  # Compute ranking for each replication
+compute_rank <- function(fit, sfx = "rep") {
+  # Compute ranking for each replication/test
   #
   # Args:
   # fit: stanfit object
+  # sfx: suffix indicating whether to extract replications or test (without underscore)
   #
   # Return:
   # Matrix of posterior samples of the rank (similar to rstan::extract output)
   
-  pt <- rstan::extract(fit, pars = "point_rep")[[1]]
-  gd <- rstan::extract(fit, pars = "goal_diff_rep")[[1]]
+  pt <- rstan::extract(fit, pars = paste("point", sfx, sep = "_"))[[1]]
+  gd <- rstan::extract(fit, pars = paste("goal_diff", sfx, sep = "_"))[[1]]
   n_teams <- ncol(pt)
   t(sapply(1:nrow(pt),
            function(i) {
@@ -178,7 +179,7 @@ check_estimates <- function(par, true_param, param_pop, param_ind) {
   tmp <- merge(subset(par, Variable %in% c(param_pop, param_ind)),
                true_param,
                by = c("Variable", "Team"))
-  # with(tmp, mean(True > `5%` & Mean < `95%`)) # Proportion of true values in 90% CI
+  prop90 <- with(tmp, mean(True > `5%` & Mean < `95%`)) # Proportion of true values in 90% CI
   
   # Population parameters
   p1 <- ggplot(data = subset(tmp, Variable %in% param_pop),
@@ -205,7 +206,7 @@ check_estimates <- function(par, true_param, param_pop, param_ind) {
                    theme_bw(base_size = 15)
                })
   
-  return(c(list(p1), pl))
+  return(c(list(p1), pl, prop90 = prop90))
 }
 
 # Analyse posterior ---------------------------------------------
@@ -244,7 +245,7 @@ PPC_football_stats <- function(fit, stat_name, fstats, teams, order = FALSE) {
   #
   # Args:
   # fit: stanfit object
-  # stat_name: name of the statistics to show (without suffix _rep)
+  # stat_name: name of the statistics to show (with suffix _rep or _test)
   # fstats: Dataframe of observed football statistics
   # teams: vector of team names (in the same order as in the model)
   # order: whether to order team by the observed statistics
@@ -254,10 +255,13 @@ PPC_football_stats <- function(fit, stat_name, fstats, teams, order = FALSE) {
   
   library(ggplot2)
   
-  if (stat_name != "rank") {
-    tmp <- rstan::extract(fit, pars = paste(stat_name, "_rep", sep = ""))[[1]]
+  sfx <- tail(strsplit(stat_name, "_")[[1]], 1)
+  fstat_name <- gsub(paste("_", sfx, sep = ""), "", stat_name)
+
+  if (fstat_name != "rank") {
+    tmp <- rstan::extract(fit, pars = stat_name)[[1]]
   } else {
-    tmp <- compute_rank(fit)
+    tmp <- compute_rank(fit, sfx)
   }
   
   n_teams <- length(teams)
@@ -277,19 +281,19 @@ PPC_football_stats <- function(fit, stat_name, fstats, teams, order = FALSE) {
   
   # Fill actual column with observed value of statistics
   for (i in 1:n_teams) {
-    out$Actual[out$Team == teams[i] & out$N == subset(fstats, Team == teams[i])[[stat_name]]] <- TRUE
+    out$Actual[out$Team == teams[i] & out$N == subset(fstats, Team == teams[i])[[fstat_name]]] <- TRUE
   }
   
   # Order teams by observed football statistics
   if (order) {
-    out$Team <- factor(out$Team, levels = teams[order(fstats[[stat_name]])])
+    out$Team <- factor(out$Team, levels = teams[order(fstats[[fstat_name]])])
   }
   
   ggplot(data = out, aes(x = N, y = Probability, fill = Actual)) +
     scale_fill_manual(values = c("#000000", "#E69F00")) +
     geom_bar(stat = "identity") +
     facet_grid(rows = vars(Team)) +
-    labs(x = stat_name) +
+    labs(x = fstat_name) +
     theme_bw(base_size = 15) +
     theme(legend.position = "none")
 }
