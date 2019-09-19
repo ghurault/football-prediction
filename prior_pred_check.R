@@ -186,21 +186,21 @@ if (FALSE) {
   check_estimates(par_fake, true_param, param_pop, param_ind[1:2])
   
   # Posterior predictive checks
-  PPC_football_stats(fit_fake, "win", fstats, teams)
-  PPC_football_stats(fit_fake, "lose", fstats, teams)
-  PPC_football_stats(fit_fake, "goal", fstats, teams)
-  PPC_football_stats(fit_fake, "point", fstats, teams)
-  PPC_football_stats(fit_fake, "rank", fstats, teams, order = TRUE)
+  PPC_football_stats(fit_fake, "win_rep", fstats, teams)
+  PPC_football_stats(fit_fake, "lose_rep", fstats, teams)
+  PPC_football_stats(fit_fake, "goal_tot_rep", fstats, teams)
+  PPC_football_stats(fit_fake, "point_rep", fstats, teams)
+  PPC_football_stats(fit_fake, "rank_rep", fstats, teams, order = TRUE)
   
   # Posterior rank
-  stackhist_rank(compute_rank(fit_fake), teams)
+  stackhist_rank(compute_rank(fit_fake, "rep"), teams)
   
   # Posterior win probability
   home_goals <- extract(fit_fake, pars = "home_goals_rep")[[1]]
   away_goals <- extract(fit_fake, pars = "away_goals_rep")[[1]]
-  fd$HomeWinProb <- apply(home_goals - away_goals, 2, function(x) {mean(x > 0)})
-  fd$AwayWinProb <- apply(home_goals - away_goals, 2, function(x) {mean(x < 0)})
-  fd$DrawProb <- apply(home_goals - away_goals, 2, function(x) {mean(x == 0)})
+  # fd$HomeWinProb <- apply(home_goals - away_goals, 2, function(x) {mean(x > 0)})
+  # fd$AwayWinProb <- apply(home_goals - away_goals, 2, function(x) {mean(x < 0)})
+  # fd$DrawProb <- apply(home_goals - away_goals, 2, function(x) {mean(x == 0)})
   
 }
 
@@ -246,8 +246,83 @@ if (FALSE) {
   # Compare prior to posterior
   plot_prior_posterior(par_pred, par_prior, param_pop)
   
-  # Evaluate predictions
-  # Performance and visualise stats predictions
+  # Statistics predictions
+  PPC_football_stats(fit_pred, "win_test", fstats, teams)
+  PPC_football_stats(fit_pred, "lose_test", fstats, teams)
+  PPC_football_stats(fit_pred, "point_test", fstats, teams)
+  stackhist_rank(compute_rank(fit_pred, "test"), teams)
+  
+  
+  # Evaluate prediction
+  # Ongoing work
+  
+  # Make predictions for outcomes and goals
+  # Include goals in existing function
+  # Better to store data as tall data (HomeTeam, AwayTeam, variable, value, probability)
+  
+  # To compute metrics
+  # Represent results as matrices for Actual outcomes and Forecast
+  # rows represent prediction, columns outcomes (L, D, W or Goals: 0, 1, 2, ... (concatenate home and away goals)) 
+  
+  process_predictions <- function(fit, teams) {
+    #
+    #
+    # Args:
+    # fit: stanfit object
+    # teams: vector of team names
+    #
+    # Returns:
+    #
+    
+    n_teams <- length(teams)
+    n_games <- n_teams * (n_teams - 1)
+    pred <- data.frame(HomeTeam = rep(NA, n_games))
+    
+    home_goals <- rstan::extract(fit, pars = "home_goals_test")[[1]]
+    away_goals <- rstan::extract(fit, pars = "away_goals_test")[[1]]
+    
+    i <- 1
+    for (ht in 1:n_teams) {
+      for (at in 1:n_teams) {
+        if (ht != at) {
+          pred[i, c("HomeTeam", "AwayTeam")] <- c(teams[ht], teams[at])
+          i <- i + 1
+        }
+      }
+    }
+    pred$HomeWinProb <- apply(home_goals - away_goals, 2, function(x) {mean(x > 0)})
+    pred$AwayWinProb <- apply(home_goals - away_goals, 2, function(x) {mean(x < 0)})
+    pred$DrawProb <- apply(home_goals - away_goals, 2, function(x) {mean(x == 0)})
+    
+    return(pred)
+  }
+  
+  pred <- process_predictions(fit_pred, teams)
+
+  compute_metrics <- function(full, train, pred) {
+    #
+    #
+    # Args:
+    # full: full dataset
+    # train: training dataset
+    # pred: prediction dataset
+    #
+    # Returns:
+    #
+    
+    # Indicates played games
+    train$is_played <- TRUE
+    full <- merge(full, train[, c("HomeTeam", "AwayTeam", "is_played")], by = c("HomeTeam", "AwayTeam"), all = TRUE)
+    # Add outcomes
+    test <- merge(pred, full[, c("HomeTeam", "AwayTeam", "FTR", "is_played")], by = c("HomeTeam", "AwayTeam"))
+    # Remove played games
+    test <- test[is.na(test$is_played), ]
+    test$is_played <- NULL
+    
+    # ...
+    
+  }
+  
   
   
 }
