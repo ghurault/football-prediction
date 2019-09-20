@@ -211,35 +211,6 @@ check_estimates <- function(par, true_param, param_pop, param_ind) {
 
 # Analyse posterior ---------------------------------------------
 
-plot_prior_posterior <- function(par, par0, param) {
-  # Plot posterior estimates alongside prior estimates
-  #
-  # Args:
-  # par: Dataframe of posterior parameter estimates
-  # par0: Dataframe of prior parameter estimates
-  # param: Vector of parameter names to plot
-  #
-  # Returns:
-  # Ggplot
-  
-  library(ggplot2)
-  
-  par <- subset(par, Variable %in% param)
-  par$Distribution <- "Posterior"
-  par0 <- subset(par0, Variable %in% param)
-  par0$Distribution <- "Prior"
-  tmp <- rbind(par, par0)
-  tmp$Distribution <- factor(tmp$Distribution, levels = c("Prior", "Posterior")) # to show posterior on top
-  
-  ggplot(data = tmp, aes(x = Variable, y = Mean, ymin = `5%`, ymax = `95%`, colour = Distribution)) +
-    geom_pointrange(position = position_dodge2(width = .3), size = 1.2) +
-    scale_colour_manual(values = c("#E69F00", "#000000")) +
-    coord_flip() +
-    labs(colour = "", x = "", y = "Estimate") +
-    theme_bw(base_size = 20) +
-    theme(legend.position = "top")
-}
-
 PPC_football_stats <- function(fit, stat_name, fstats, teams, order = FALSE) {
   # Plot posterior predictive checks of some football statistics (number of something)
   #

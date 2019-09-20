@@ -180,7 +180,7 @@ if (FALSE) {
   par_fake <- extract_parameters(fit_fake, param, param_ind, param_obs, teams, data_stan)
   
   # Compare prior to posterior
-  plot_prior_posterior(par_fake, par_prior, param_pop)
+  HuraultMisc::plot_prior_posterior(par_fake, par_prior, param_pop)
   
   # Can we retrieve parameters?
   check_estimates(par_fake, true_param, param_pop, param_ind[1:2])
@@ -244,7 +244,7 @@ if (FALSE) {
   par_pred <- extract_parameters(fit_pred, param, param_ind, param_obs, teams, data_stan)
   
   # Compare prior to posterior
-  plot_prior_posterior(par_pred, par_prior, param_pop)
+  HuraultMisc::plot_prior_posterior(par_pred, par_prior, param_pop)
   
   # Statistics predictions
   PPC_football_stats(fit_pred, "win_test", fstats, teams)
