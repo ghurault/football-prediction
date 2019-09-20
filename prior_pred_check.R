@@ -6,8 +6,7 @@
 
 rm(list = ls())
 
-seed <- 1559354162
-set.seed(seed) # Reproducibility
+set.seed(1559354162) # Reproducibility (different seed use in Stan)
 
 library(HuraultMisc)
 source("functions.R")
@@ -73,7 +72,7 @@ data_prior <- list(
 
 if (run_prior) {
   fit_prior <- stan(file = stan_code, data = data_prior, pars = param,
-                    iter = n_it, chains = n_chains, seed = seed)
+                    iter = n_it, chains = n_chains)
   saveRDS(fit_prior, file = prior_file)
 } else {
   fit_prior <- readRDS(prior_file)
@@ -160,7 +159,7 @@ data_fake <- list(
 
 if (run_fake) {
   fit_fake <- stan(file = stan_code, data = data_fake, pars = param,
-                   iter = n_it, chains = n_chains, seed = seed)
+                   iter = n_it, chains = n_chains)
   saveRDS(fit_fake, file = fake_file)
 } else {
   fit_fake <- readRDS(fake_file)
@@ -224,7 +223,7 @@ param <- c(param_pop, param_ind, param_obs, "home_goals_test", "away_goals_test"
 
 if (run_pred) {
   fit_pred <- stan(file = stan_code, data = data_pred, pars = param,
-                   iter = n_it, chains = n_chains, seed = seed)
+                   iter = n_it, chains = n_chains)
   saveRDS(fit_pred, file = pred_file)
 } else {
   fit_pred <- readRDS(pred_file)
