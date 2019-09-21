@@ -103,9 +103,35 @@ football_stats <- function(df) {
   return(out)
 }
 
+# Process data ------------------------------------------------------------
+
+game_id <- function(teams) {
+  # Associate each game with a unique identifier according to the Stan model
+  #
+  # Args:
+  # teams: Vector of teams names
+  #
+  # Returns:
+  # Dataframe
+  
+  n_teams <- length(teams)
+  n_games <- n_teams * (n_teams - 1)
+  out <- data.frame(Game = 1:n_games)
+  i <- 1
+  for (ht in 1:n_teams) {
+    for (at in 1:n_teams) {
+      if (ht != at) {
+        out[i, c("HomeTeam", "AwayTeam")] <- c(teams[ht], teams[at])
+        i <- i + 1
+      }
+    }
+  }
+  return(out)
+}
+
 # Processing Stan output --------------------------------------
 
-extract_parameters <- function(fit, param, param_ind, param_obs, teams, data_stan) {
+extract_parameters <- function(fit, param, param_ind, param_obs, teams, games, data_stan) {
   # Extract parameters' summary
   #
   # Args:
@@ -114,6 +140,7 @@ extract_parameters <- function(fit, param, param_ind, param_obs, teams, data_sta
   # param_ind: individual parameters in param
   # param_obs
   # teams: vector of team ID
+  # games: vector of game ID
   # data_stan: data input to the stan function
   #
   # Returns: dataframe containing posterior summary statistics of the parameters 
@@ -131,7 +158,7 @@ extract_parameters <- function(fit, param, param_ind, param_obs, teams, data_sta
   ## Game dependent parameters
   for (i in intersect(param_obs, param)) {
     idx <- which(par$Variable == i)
-    par$Game[idx] <- par$Index[idx]
+    par$Game[idx] <- games[par$Index[idx]]
   }
 
   par$Index <- NULL

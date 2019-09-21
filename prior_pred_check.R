@@ -26,6 +26,7 @@ prior_file <- "Results/prior_mdl1.rds"
 fake_file <- "Results/fake_mdl1.rds"
 pred_file <- "Results/fake_pred_mdl1.rds"
 
+id <- game_id(teams)
 n_chains <- 4
 n_it <- 2000
 
@@ -57,16 +58,14 @@ param <- c(param_pop, param_ind, param_obs) # "home_goals_test", "away_goals_tes
 n_teams <- 20
 teams <- LETTERS[1:n_teams]
 
-id <- expand.grid(Home = 1:n_teams, Away = 1:n_teams)
-id <- id[id$Home != id$Away, ]
 
 data_prior <- list(
   N_teams = n_teams,
   N_games = n_teams * (n_teams - 1),
   home_goals = rep(1, n_teams * (n_teams - 1)), # doesn't matter
   away_goals = rep(1, n_teams * (n_teams - 1)), # doesn't matter
-  home_id = id$Home,
-  away_id = id$Away,
+  home_id = sapply(id[["HomeTeam"]], function(x) {which(x == teams)}),
+  away_id = sapply(id[["AwayTeam"]], function(x) {which(x == teams)}),
   run = 0
 )
 
@@ -79,7 +78,7 @@ if (run_prior) {
 }
 
 # shinystan::launch_shinystan(fit_prior)
-par_prior <- extract_parameters(fit_prior, param, param_ind, param_obs, teams, data_stan)
+par_prior <- extract_parameters(fit_prior, param, param_ind, param_obs, teams, id$Game, data_stan)
 # pairs(fit_prior, pars = param_pop)
 # plot(fit_prior, pars = param_pop, plotfun = "trace")
 
@@ -130,12 +129,10 @@ true_param <- rbind(
                  }))
 )
 
-fd <- data.frame(HomeTeam = teams[id$Home],
-                 AwayTeam = teams[id$Away],
-                 FTHG = extract(fit_prior, pars = "home_goals_rep")[[1]][draw, ],
-                 FTAG = extract(fit_prior, pars = "away_goals_rep")[[1]][draw, ],
-                 FTR = NA)
-fd$Game <- 1:nrow(fd)
+fd <- cbind(id,
+            data.frame(FTHG = extract(fit_prior, pars = "home_goals_rep")[[1]][draw, ],
+                       FTAG = extract(fit_prior, pars = "away_goals_rep")[[1]][draw, ],
+                       FTR = NA))
 fd$FTR[fd$FTHG == fd$FTAG] <- "D"
 fd$FTR[fd$FTHG > fd$FTAG] <- "H"
 fd$FTR[fd$FTHG < fd$FTAG] <- "A"
@@ -176,7 +173,7 @@ if (FALSE) {
   plot(fit_fake, pars = param_pop, plotfun = "trace")
   
   print(fit_fake, pars = param_pop)
-  par_fake <- extract_parameters(fit_fake, param, param_ind, param_obs, teams, data_stan)
+  par_fake <- extract_parameters(fit_fake, param, param_ind, param_obs, teams, fd$Game, data_stan)
   
   # Compare prior to posterior
   HuraultMisc::plot_prior_posterior(par_fake, par_prior, param_pop)
@@ -240,7 +237,7 @@ if (FALSE) {
   plot(fit_pred, pars = param_pop, plotfun = "trace")
   
   print(fit_pred, pars = param_pop)
-  par_pred <- extract_parameters(fit_pred, param, param_ind, param_obs, teams, data_stan)
+  par_pred <- extract_parameters(fit_pred, param, param_ind, param_obs, teams, fd_train$Game, data_stan)
   
   # Compare prior to posterior
   HuraultMisc::plot_prior_posterior(par_pred, par_prior, param_pop)
