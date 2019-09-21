@@ -247,72 +247,113 @@ if (FALSE) {
   # Evaluate prediction
   # Ongoing work
   
-  # Make predictions for outcomes and goals
-  # Include goals in existing function
-  # Better to store data as tall data (HomeTeam, AwayTeam, variable, value, probability)
-  
-  # To compute metrics
-  # Represent results as matrices for Actual outcomes and Forecast
-  # rows represent prediction, columns outcomes (L, D, W or Goals: 0, 1, 2, ... (concatenate home and away goals)) 
-  
-  process_predictions <- function(fit, teams) {
-    #
+  process_predictions <- function(fit, id) {
+    # Compute predicted probability for goals scored and game results
     #
     # Args:
     # fit: stanfit object
-    # teams: vector of team names
+    # id: Dataframe of game id
     #
     # Returns:
-    #
-    
-    n_teams <- length(teams)
-    n_games <- n_teams * (n_teams - 1)
-    pred <- data.frame(HomeTeam = rep(NA, n_games))
+    # Dataframe in tall format
     
     home_goals <- rstan::extract(fit, pars = "home_goals_test")[[1]]
     away_goals <- rstan::extract(fit, pars = "away_goals_test")[[1]]
     
-    i <- 1
-    for (ht in 1:n_teams) {
-      for (at in 1:n_teams) {
-        if (ht != at) {
-          pred[i, c("HomeTeam", "AwayTeam")] <- c(teams[ht], teams[at])
-          i <- i + 1
-        }
-      }
-    }
-    pred$HomeWinProb <- apply(home_goals - away_goals, 2, function(x) {mean(x > 0)})
-    pred$AwayWinProb <- apply(home_goals - away_goals, 2, function(x) {mean(x < 0)})
-    pred$DrawProb <- apply(home_goals - away_goals, 2, function(x) {mean(x == 0)})
+    # FTR
+    pred1 <- id
+    pred1$H <- apply(home_goals - away_goals, 2, function(x) {mean(x > 0)})
+    pred1$A <- apply(home_goals - away_goals, 2, function(x) {mean(x < 0)})
+    pred1$D <- apply(home_goals - away_goals, 2, function(x) {mean(x == 0)})
+    pred1 <- reshape2::melt(pred1, id.vars = c("Game", "HomeTeam", "AwayTeam"), variable.name = "Value", value.name = "Probability")
+    pred1$Variable <- "FTR"
     
-    return(pred)
+    # Goals
+    pred_goals <- function(goals, lbl) {
+      # Compute dataframe for predicted number of goals
+      n_post <- nrow(goals) # Number of samples
+      out <- do.call(rbind,
+                     lapply(1:nrow(id),
+                            function(i) {
+                              tmp <- table(goals[, i]) / n_post
+                              tmp <- as.data.frame(tmp)
+                              colnames(tmp) <- c("Value", "Probability")
+                              cbind(id[i, ], tmp)
+                            }))
+      out$Variable <- lbl
+      return(out)
+    }
+    pred2 <- pred_goals(home_goals, "FTHG")
+    pred3 <- pred_goals(away_goals, "FTAG")
+    
+    rbind(pred1, pred2, pred3)
   }
   
-  pred <- process_predictions(fit_pred, teams)
-
-  compute_metrics <- function(full, train, pred) {
-    #
-    #
-    # Args:
-    # full: full dataset
-    # train: training dataset
-    # pred: prediction dataset
-    #
-    # Returns:
-    #
-    
-    # Indicates played games
-    train$is_played <- TRUE
-    full <- merge(full, train[, c("HomeTeam", "AwayTeam", "is_played")], by = c("HomeTeam", "AwayTeam"), all = TRUE)
-    # Add outcomes
-    test <- merge(pred, full[, c("HomeTeam", "AwayTeam", "FTR", "is_played")], by = c("HomeTeam", "AwayTeam"))
-    # Remove played games
-    test <- test[is.na(test$is_played), ]
-    test$is_played <- NULL
-    
-    # ...
-    
+  # To compute metrics
+  # Identify which games has been played
+  # Represent results as matrices for Actual outcomes and Forecast
+  # rows represent prediction, columns outcomes (L, D, W or Goals: 0, 1, 2, ... (concatenate home and away goals)) 
+  # For goals, need to pad with 0 to max_goal
+  # have an option to not distinguish between HomeGoals and AwayGoals
+  
+  
+  pred0 <- process_predictions(fit_pred, id)
+  # Function to compute forecast and actual matrices
+  #
+  #
+  pred <- pred0 # Prediction dataframe
+  act <- fd # Actual dataframe
+  test_game <- setdiff(fd$Game, fd_train$Game) # test game ID
+  var <- "FTHG" # "FTR"
+  #
+  
+  if (!(var %in% c("FTR", "FTHG", "FTAG"))) {
+    stop("var should be either `FTR`, `FTHG` or `FTAG`.")
   }
+  
+  # Select game
+  pred <- pred[(pred$Game %in% test_game) & (pred$Variable == var), ]
+  act <- act[act$Game %in% test_game, ]
+  
+  if (var == "FTR") {
+    # Order FTR outcomes
+    pred$Value <- factor(pred$Value, levels = c("A", "D", "H"))
+  } else {
+    # Convert number of goals to numeric
+    pred$Value <- as.numeric(as.character(pred$Value))
+    max_pred_goal <- max(pred$Value)
+  }
+
+  # Reshape dataframe
+  pred <- reshape2::dcast(pred, Game + HomeTeam + AwayTeam ~ Value, value.var = "Probability")
+  if (var != "FTR") {
+    # Pad with 0 probabilities
+    pred[is.na(pred)] <- 0
+    # Add extra 0 columns if max predicted goals below max observed goals
+    max_obs_goal <- max(act[, var])
+    if (max_pred_goal < max_obs_goal) {
+      for (i in (max_pred_goal + 1):max_obs_goal) {
+        pred[, as.character(i)] <- rep(0, nrow(pred))
+      }
+    }
+  }
+
+  # Generate similar matrix for actual outcomes
+  if (var == "FTR") {
+    act <- merge(act[, c("Game", "HomeTeam", "AwayTeam", "FTR")],
+                 pred,
+                 by = c("Game", "HomeTeam", "AwayTeam"))
+    act[, c("A", "D", "H")] <- 0
+    for (i in 1:nrow(act)) {
+      act[i, as.character(act$FTR[i])] <- 1
+    }
+  }
+  # TO DO
+  # Do the same for goals
+  # Return pred and act
+  # merge HomeGoals and AwayGoals in different functions
+
+  
   
   
   
