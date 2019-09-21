@@ -1,6 +1,6 @@
 # Notes -------------------------------------------------------------------
 
-# Probably need to adjust some priors
+# 
 
 # Initialisation ----------------------------------------------------------
 
@@ -16,9 +16,9 @@ library(rstan)
 rstan_options(auto_write = TRUE) # Save compiled model
 options(mc.cores = parallel::detectCores()) # Parallel computing
 
-run_prior <- FALSE
-run_fake <- FALSE
-run_pred <- FALSE
+run_prior <- TRUE
+run_fake <- TRUE
+run_pred <- TRUE
 
 stan_code <- "Model/mdl1.stan"
 
@@ -26,10 +26,16 @@ prior_file <- "Results/prior_mdl1.rds"
 fake_file <- "Results/fake_mdl1.rds"
 pred_file <- "Results/fake_pred_mdl1.rds"
 
+# Data parameters
+n_teams <- 20
+teams <- LETTERS[1:n_teams]
 id <- game_id(teams)
+
+# MCMC options
 n_chains <- 4
 n_it <- 2000
 
+# Parameters of interest
 param_pop <- c("b", "home_advantage", "sigma_ability")
 param_rep <- c(
   # "win_home_rep", "win_away_rep",
@@ -39,7 +45,7 @@ param_rep <- c(
   # "goal_diff_home_rep", "goal_diff_away_rep",
   "win_rep", "draw_rep", "lose_rep",
   "goal_tot_rep", "goal_diff_rep", "point_rep"
-  )
+)
 param_test <- c(
   # "win_home_test", "win_away_test",
   # "draw_home_test", "draw_away_test",
@@ -54,10 +60,6 @@ param_obs <- c("home_goals_rep", "away_goals_rep")
 param <- c(param_pop, param_ind, param_obs) # "home_goals_test", "away_goals_test"
 
 # Simulate from prior ----------------------------------------------------------
-
-n_teams <- 20
-teams <- LETTERS[1:n_teams]
-
 
 data_prior <- list(
   N_teams = n_teams,
@@ -191,18 +193,11 @@ if (FALSE) {
   # Posterior rank
   stackhist_rank(compute_rank(fit_fake, "rep"), teams)
   
-  # Posterior win probability
-  home_goals <- extract(fit_fake, pars = "home_goals_rep")[[1]]
-  away_goals <- extract(fit_fake, pars = "away_goals_rep")[[1]]
-  # fd$HomeWinProb <- apply(home_goals - away_goals, 2, function(x) {mean(x > 0)})
-  # fd$AwayWinProb <- apply(home_goals - away_goals, 2, function(x) {mean(x < 0)})
-  # fd$DrawProb <- apply(home_goals - away_goals, 2, function(x) {mean(x == 0)})
-  
 }
 
 # Fit fake data to test predictions ---------------------------------------
 
-fd_train <- fd[1:round(nrow(fd) * 0.7), ]
+fd_train <- fd[sample(1:nrow(fd), round(0.7 * nrow(fd))), ]
 
 data_pred <- list(
   N_teams = n_teams,
