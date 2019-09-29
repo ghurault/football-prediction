@@ -243,9 +243,18 @@ if (FALSE) {
   PPC_football_stats(fit_pred, "point_test", fstats, teams)
   stackhist_rank(compute_rank(fit_pred, "test"), teams)
   
-  
+  #
+  #
+  #
+  #
+  #
   # Evaluate prediction
   # Ongoing work
+  #
+  #
+  #
+  #
+  #
   
   process_predictions <- function(fit, id) {
     # Compute predicted probability for goals scored and game results
@@ -318,6 +327,15 @@ if (FALSE) {
       # Convert number of goals to numeric
       pred$Value <- as.numeric(as.character(pred$Value))
       max_pred_goal <- max(pred$Value)
+      # Pad with 0 if some goal values are missing between 1:max_pred_goal
+      pred <- rbind(pred,
+                    do.call(rbind,
+                            lapply(setdiff(1:max_pred_goal, unique(pred$Value)),
+                                   function(i) {
+                                     tmp <- pred[pred$Game == pred$Game[1], ]
+                                     tmp[, c("Value", "Probability")] <- c(i, 0)
+                                     return(tmp)
+                                   })))
     }
     
     # Reshape dataframe
@@ -345,62 +363,85 @@ if (FALSE) {
     }
     act[[var]] <- NULL
     
+    # Reorder
+    pred <- pred[with(pred, order(Game, HomeTeam, AwayTeam)), ]
+    act <- act[with(act, order(Game, HomeTeam, AwayTeam)), ]
+    
     return(list(Forecast = pred, Actual = act))
   }
   
-  # To compute metrics
+  compute_metrics <- function(pred, act, test_game, var) {
+    # Compute metrics
+    #
+    # Args:
+    # pred: prediction dataframe
+    # act: actual (observed outcome) dataframe
+    # test_game: vector of test game ID
+    # var: character corresponding to the variable to consider: FTR, FTHG or FTAG
+    #
+    # Returns:
+    # ...
 
-  # have an option to not distinguish between HomeGoals and AwayGoals
-  
-  
-  pred0 <- process_predictions(fit_pred, id)
-  l <- prepare_predictions(pred = pred0, act = fd, test_game = setdiff(fd$Game, fd_train$Game), var = "FTR")
-  
-  # TO DO
-  # Compute metrics
-  # have an option to merge FTHG and FTAG
-  
-  # Some column missing in Forecast dataframe: e.g. column goal 151, 153 but not 152
-  
-  
-  
-  # compute_metrics <- function(pred, act, test_game, var)
-  #
-  pred <- pred0
-  act <- fd
-  test_game <- setdiff(fd$Game, fd_train$Game)
-  var <- "FTR" # FTR, FTHG, FTAG
-  #
-  
-  if (var == "FTG") {
-    # Combine FTHG and FTAG
-    l1 <- prepare_predictions(pred, act, test_game, "FTHG")
-    l2 <- prepare_predictions(pred, act, test_game, "FTAG")
-    
-    # Need to pad with extra zeros
-    f1 <- l1$Forecast
-    a1 <- l1$Actual
-    f2 <- l2$Forecast
-    a2 <- l2$Actual
-    
-    mg1 <- ncol(f1) - 3 - 1 # max goal for 1
-    mg2 <- ncol(f2) - 3 - 1 # max goal for 2
-    
-    # TO DO
-    
-    if (mg1 > mg2) {
-      # Pad f2 and a2 with 0
-      f2 [, as.character(mg2 + 1):mg1] <- 0
-    } else if (mg2 > mg1) {
-      # Pad f1 and a1 with 0
-      f1[, as.character((mg1 + 1):mg2)] <- 0
+    if (var == "FTG") {
+      # Combine FTHG and FTAG
+      l1 <- prepare_predictions(pred, act, test_game, "FTHG")
+      l2 <- prepare_predictions(pred, act, test_game, "FTAG")
+      f1 <- l1$Forecast
+      a1 <- l1$Actual
+      f2 <- l2$Forecast
+      a2 <- l2$Actual
+      
+      mg1 <- ncol(f1) - 3 - 1 # max goal for 1
+      mg2 <- ncol(f2) - 3 - 1 # max goal for 2
+      if (mg1 > mg2) {
+        # Pad f2 and a2 with 0
+        f2[, as.character(mg2 + 1):mg1] <- 0
+        a2[, as.character(mg2 + 1):mg1] <- 0
+      } else if (mg2 > mg1) {
+        # Pad f1 and a1 with 0
+        f1[, as.character((mg1 + 1):mg2)] <- 0
+        a1[, as.character((mg1 + 1):mg2)] <- 0
+      }
+      f <- rbind(f1, f2)
+      a <- rbind(a1, a2)
+    } else {
+      l <- prepare_predictions(pred, act, test_game, var)
+      f <- l$Forecast
+      a <- l$Actual
     }
     
+    col_id <- (colnames(f) %in% c("Game", "HomeTeam", "AwayTeam"))
+    Forecast <- as.matrix(f[, !col_id])
+    Actual <- as.matrix(a[, !col_id])
+    CumForecast <- t(apply(Forecast, 1, cumsum))
+    CumActual <- t(apply(Actual, 1, cumsum))
     
+    K <- ncol(Forecast) # somewhat arbitrary for goals
+    d <- min(Forecast[Forecast != 0]) / 100 # to avoid log(0)
     
-  } else {
-    l <- prepare_predictions(pred, act, test_game, var)
+    RPS <- apply((CumActual - CumForecast)^2, 1, sum) / (K - 1)
+    CumLogLoss <- -apply(CumActual * log(pmax(CumForecast, d)), 1, sum) / (K - 1)
+    
+    BrierScore <- apply((Actual - Forecast)^2, 1, mean) # Between 0 and 2 (regardless of the number of categories)
+    LogLoss <- -apply(Actual * log(Forecast + d), 1, mean)
+    
+    # Return metric per prediction (need to include additional info for FTG then) or average?
+    data.frame(Metric = c("RPS", "CumLogLoss", "BrierScore", "LogLoss"),
+               Value = sapply(list(RPS, CumLogLoss, BrierScore, LogLoss), mean),
+               Variable = var)
+    # cbind(f[, col_id],
+    #       data.frame(RPS, CumLogLoss, BrierScore, LogLoss))
   }
+  
+  pred0 <- process_predictions(fit_pred, id)
+  # l <- prepare_predictions(pred = pred0, act = fd, test_game = setdiff(fd$Game, fd_train$Game), var = "FTR")
+  m <- compute_metrics(pred = pred0, act = fd, test_game = setdiff(fd$Game, fd_train$Game), var = "FTR")
+  
+  # TO DO
+  # May need to change output of compute_metrics depending on future functions
+  # Check results from compute_metrics
+  # Write function to plot metrics
+  
   
   
   
