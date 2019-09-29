@@ -16,9 +16,9 @@ library(rstan)
 rstan_options(auto_write = TRUE) # Save compiled model
 options(mc.cores = parallel::detectCores()) # Parallel computing
 
-run_prior <- TRUE
-run_fake <- TRUE
-run_pred <- TRUE
+run_prior <- FALSE
+run_fake <- FALSE
+run_pred <- FALSE
 
 stan_code <- "Model/mdl1.stan"
 
@@ -289,70 +289,119 @@ if (FALSE) {
     rbind(pred1, pred2, pred3)
   }
   
+  prepare_predictions <- function(pred, act, test_game, var = "FTR") {
+    # Select games in testing set,
+    # and compute forecast and actual dataframe/matrices for variable var.
+    # This function is an intermediate step for computing metrics.
+    #
+    # Args:
+    # pred: prediction dataframe
+    # act: actual (observed outcome) dataframe
+    # test_game: vector of test game ID
+    # var: character corresponding to the variable to consider: FTR, FTHG or FTAG
+    #
+    # Returns:
+    # List containing Forecast (prediction) and Actual dataframe
+    
+    if (!(var %in% c("FTR", "FTHG", "FTAG"))) {
+      stop("var should be either `FTR`, `FTHG` or `FTAG`.")
+    }
+    
+    # Select game
+    pred <- pred[(pred$Game %in% test_game) & (pred$Variable == var), ]
+    act <- act[act$Game %in% test_game, ]
+    
+    if (var == "FTR") {
+      # Order FTR outcomes
+      pred$Value <- factor(pred$Value, levels = c("A", "D", "H"))
+    } else {
+      # Convert number of goals to numeric
+      pred$Value <- as.numeric(as.character(pred$Value))
+      max_pred_goal <- max(pred$Value)
+    }
+    
+    # Reshape dataframe
+    pred <- reshape2::dcast(pred, Game + HomeTeam + AwayTeam ~ Value, value.var = "Probability")
+    if (var != "FTR") {
+      # Pad with 0 probabilities
+      pred[is.na(pred)] <- 0
+      # Add extra 0 columns if max predicted goals below max observed goals
+      max_obs_goal <- max(act[, var])
+      if (max_pred_goal < max_obs_goal) {
+        for (i in (max_pred_goal + 1):max_obs_goal) {
+          pred[, as.character(i)] <- rep(0, nrow(pred))
+        }
+      }
+    }
+    
+    # Generate similar matrix for actual outcomes
+    act <- merge(act[, c("Game", "HomeTeam", "AwayTeam", var)],
+                 pred,
+                 by = c("Game", "HomeTeam", "AwayTeam"))
+    outcome_id <-  !(colnames(act) %in%  c("Game", "HomeTeam", "AwayTeam", var))
+    act[, outcome_id] <- 0
+    for (i in 1:nrow(act)) {
+      act[i, as.character(act[i, var])] <- 1
+    }
+    act[[var]] <- NULL
+    
+    return(list(Forecast = pred, Actual = act))
+  }
+  
   # To compute metrics
-  # Identify which games has been played
-  # Represent results as matrices for Actual outcomes and Forecast
-  # rows represent prediction, columns outcomes (L, D, W or Goals: 0, 1, 2, ... (concatenate home and away goals)) 
-  # For goals, need to pad with 0 to max_goal
+
   # have an option to not distinguish between HomeGoals and AwayGoals
   
   
   pred0 <- process_predictions(fit_pred, id)
-  # Function to compute forecast and actual matrices
-  #
-  #
-  pred <- pred0 # Prediction dataframe
-  act <- fd # Actual dataframe
-  test_game <- setdiff(fd$Game, fd_train$Game) # test game ID
-  var <- "FTHG" # "FTR"
-  #
+  l <- prepare_predictions(pred = pred0, act = fd, test_game = setdiff(fd$Game, fd_train$Game), var = "FTR")
   
-  if (!(var %in% c("FTR", "FTHG", "FTAG"))) {
-    stop("var should be either `FTR`, `FTHG` or `FTAG`.")
-  }
-  
-  # Select game
-  pred <- pred[(pred$Game %in% test_game) & (pred$Variable == var), ]
-  act <- act[act$Game %in% test_game, ]
-  
-  if (var == "FTR") {
-    # Order FTR outcomes
-    pred$Value <- factor(pred$Value, levels = c("A", "D", "H"))
-  } else {
-    # Convert number of goals to numeric
-    pred$Value <- as.numeric(as.character(pred$Value))
-    max_pred_goal <- max(pred$Value)
-  }
-
-  # Reshape dataframe
-  pred <- reshape2::dcast(pred, Game + HomeTeam + AwayTeam ~ Value, value.var = "Probability")
-  if (var != "FTR") {
-    # Pad with 0 probabilities
-    pred[is.na(pred)] <- 0
-    # Add extra 0 columns if max predicted goals below max observed goals
-    max_obs_goal <- max(act[, var])
-    if (max_pred_goal < max_obs_goal) {
-      for (i in (max_pred_goal + 1):max_obs_goal) {
-        pred[, as.character(i)] <- rep(0, nrow(pred))
-      }
-    }
-  }
-
-  # Generate similar matrix for actual outcomes
-  if (var == "FTR") {
-    act <- merge(act[, c("Game", "HomeTeam", "AwayTeam", "FTR")],
-                 pred,
-                 by = c("Game", "HomeTeam", "AwayTeam"))
-    act[, c("A", "D", "H")] <- 0
-    for (i in 1:nrow(act)) {
-      act[i, as.character(act$FTR[i])] <- 1
-    }
-  }
   # TO DO
-  # Do the same for goals
-  # Return pred and act
-  # merge HomeGoals and AwayGoals in different functions
-
+  # Compute metrics
+  # have an option to merge FTHG and FTAG
+  
+  # Some column missing in Forecast dataframe: e.g. column goal 151, 153 but not 152
+  
+  
+  
+  # compute_metrics <- function(pred, act, test_game, var)
+  #
+  pred <- pred0
+  act <- fd
+  test_game <- setdiff(fd$Game, fd_train$Game)
+  var <- "FTR" # FTR, FTHG, FTAG
+  #
+  
+  if (var == "FTG") {
+    # Combine FTHG and FTAG
+    l1 <- prepare_predictions(pred, act, test_game, "FTHG")
+    l2 <- prepare_predictions(pred, act, test_game, "FTAG")
+    
+    # Need to pad with extra zeros
+    f1 <- l1$Forecast
+    a1 <- l1$Actual
+    f2 <- l2$Forecast
+    a2 <- l2$Actual
+    
+    mg1 <- ncol(f1) - 3 - 1 # max goal for 1
+    mg2 <- ncol(f2) - 3 - 1 # max goal for 2
+    
+    # TO DO
+    
+    if (mg1 > mg2) {
+      # Pad f2 and a2 with 0
+      f2 [, as.character(mg2 + 1):mg1] <- 0
+    } else if (mg2 > mg1) {
+      # Pad f1 and a1 with 0
+      f1[, as.character((mg1 + 1):mg2)] <- 0
+    }
+    
+    
+    
+  } else {
+    l <- prepare_predictions(pred, act, test_game, var)
+  }
+  
   
   
   
