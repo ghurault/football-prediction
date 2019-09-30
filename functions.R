@@ -307,7 +307,7 @@ stackhist_rank <- function(rank_rep, teams) {
   # Ggplot
   
   library(ggplot2)
-  getPalette = colorRampPalette(rev(RColorBrewer::brewer.pal(9, "Set1"))) # to extend colour palette
+  getPalette <- colorRampPalette(rev(RColorBrewer::brewer.pal(9, "Set1"))) # to extend colour palette
   
   rk <- do.call(rbind,
                 lapply(1:length(teams),
