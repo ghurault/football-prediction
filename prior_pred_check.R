@@ -197,7 +197,7 @@ if (FALSE) {
 
 # Fit fake data to test predictions ---------------------------------------
 
-fd_train <- fd[sample(1:nrow(fd), round(0.7 * nrow(fd))), ]
+fd_train <- fd[which(rbinom(nrow(fd), 1, 0.7) == 1), ]
 
 data_pred <- list(
   N_teams = n_teams,
@@ -327,12 +327,12 @@ if (FALSE) {
       # Convert number of goals to numeric
       pred$Value <- as.numeric(as.character(pred$Value))
       max_pred_goal <- max(pred$Value)
-      # Pad with 0 if some goal values are missing between 1:max_pred_goal
+      # Pad with 0 if some goal values are missing between 1:max_pred_goal so correct 0 padding later 
       pred <- rbind(pred,
                     do.call(rbind,
                             lapply(setdiff(1:max_pred_goal, unique(pred$Value)),
                                    function(i) {
-                                     tmp <- pred[pred$Game == pred$Game[1], ]
+                                     tmp <- pred[1, ]
                                      tmp[, c("Value", "Probability")] <- c(i, 0)
                                      return(tmp)
                                    })))
@@ -380,8 +380,8 @@ if (FALSE) {
     # var: character corresponding to the variable to consider: FTR, FTHG or FTAG
     #
     # Returns:
-    # ...
-
+    # Dataframe of metrics
+    
     if (var == "FTG") {
       # Combine FTHG and FTAG
       l1 <- prepare_predictions(pred, act, test_game, "FTHG")
@@ -433,19 +433,120 @@ if (FALSE) {
     #       data.frame(RPS, CumLogLoss, BrierScore, LogLoss))
   }
   
+  plot_lift <- function(prep_pred) {
+    # Plot lift curve
+    #
+    # Args:
+    # prep_pred: List containing Forecast and Actual dataframe (output from prepare_predictions)
+    #
+    # Returns:
+    # Ggplot
+    
+    library(ggplot2)
+    id_lbl <- c("Game", "HomeTeam", "AwayTeam")
+    val <- setdiff(colnames(prep_pred$Forecast), id_lbl)
+    
+    if (length(val) < 9) {
+      palette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+    } else {
+      getPalette <- colorRampPalette(rev(RColorBrewer::brewer.pal(9, "Set1"))) # to extend colour palette
+      palette <- getPalette(length(val))
+    }
+    
+    lift <- do.call(rbind,
+                    lapply(val,
+                           function(x) {
+                             f <- prep_pred$Forecast[, c("Game", "HomeTeam", "AwayTeam", x)]
+                             f <- change_colnames(f, x, "Forecast")
+                             a <- prep_pred$Actual[, c("Game", "HomeTeam", "AwayTeam", x)]
+                             a <- change_colnames(a, x, "Actual")
+                             
+                             tmp <- merge(f, a, by = c("Game", "HomeTeam", "AwayTeam"))
+                             tmp <- tmp[order(tmp$Forecast, decreasing = TRUE), ]
+                             
+                             PropBet <- (1:nrow(tmp)) / nrow(tmp)
+                             PropWin <- cumsum(tmp$Actual) / (1:nrow(tmp))
+                             Lift <- PropWin / mean(tmp$Actual)
+                             
+                             data.frame(Value = x, PropBet, PropWin, Lift)
+                           }))
+    lift$Value <- factor(lift$Value, levels = val)
+    
+    ggplot(data = lift, aes(x = PropBet, y = Lift, colour = Value)) +
+      geom_line() +
+      geom_hline(yintercept = 1) +
+      scale_colour_manual(values = palette) +
+      labs(colour = "") +
+      theme_bw(base_size = 15)
+    
+  }
+  
+  plot_calibration <- function(prep_pred, CI = NULL) {
+    # Plot calibration
+    #
+    # Args:
+    # prep_pred: List containing Forecast and Actual dataframe (output from prepare_predictions)
+    # CI: confidence level in %. If NULL, confidence intervals are not computed.
+    #
+    # Returns:
+    # Ggplot
+    
+    library(ggplot2)
+    id_lbl <- c("Game", "HomeTeam", "AwayTeam")
+    val <- setdiff(colnames(prep_pred$Forecast), id_lbl)
+    
+    cal <- do.call(rbind,
+                   lapply(val,
+                          function(x) {
+                            tmp <- HuraultMisc::compute_calibration(prep_pred$Forecast[, x],
+                                                                    prep_pred$Actual[, x],
+                                                                    method = "smoothing",
+                                                                    CI = CI)
+                            tmp$Value <- x
+                            return(tmp)
+                          }))
+    
+    if (length(val) < 8) {
+      palette <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+    } else {
+      getPalette <- colorRampPalette(rev(RColorBrewer::brewer.pal(9, "Set1"))) # to extend colour palette
+      palette <- getPalette(length(val))
+    }
+    
+    p <- ggplot(data = cal, aes(x = Forecast, y = Frequency, colour = Value)) +
+      geom_line() +
+      scale_colour_manual(values = palette) +
+      geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
+      coord_cartesian(xlim = c(0, 1), ylim = c(0, 1)) +
+      labs(colour = "", fill = "") +
+      theme_bw(base_size = 15)
+    
+    if (!is.null(CI)) {
+      p <- p +
+        geom_ribbon(aes(ymin = Lower, ymax = Upper, fill = Value), alpha = 0.5) +
+        scale_fill_manual(values = palette)
+    }
+    return(p)
+    
+  }
+  
   pred0 <- process_predictions(fit_pred, id)
-  # l <- prepare_predictions(pred = pred0, act = fd, test_game = setdiff(fd$Game, fd_train$Game), var = "FTR")
+  l1 <- prepare_predictions(pred = pred0, act = fd, test_game = setdiff(fd$Game, fd_train$Game), var = "FTR")
+  l2 <- prepare_predictions(pred = pred0, act = fd, test_game = setdiff(fd$Game, fd_train$Game), var = "FTHG")
   m <- compute_metrics(pred = pred0, act = fd, test_game = setdiff(fd$Game, fd_train$Game), var = "FTR")
   
+  plot_lift(l1)
+  plot_calibration(l1, NULL)
+  plot_calibration(l1, CI = 0.95)
+  # plot_lift(l2)
+  # plot_calibration(l2, NULL)
+
   # TO DO
-  # May need to change output of compute_metrics depending on future functions
-  # Check results from compute_metrics
-  # Write function to plot metrics
+  # option to combine all values for plot_lift and plot_calibration
+  # option to compute FTG in plot_lift and plot_calibration
   
-  
-  
-  
-  
-  
+
+
+
 }
 
