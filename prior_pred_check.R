@@ -433,11 +433,12 @@ if (FALSE) {
     #       data.frame(RPS, CumLogLoss, BrierScore, LogLoss))
   }
   
-  plot_lift <- function(prep_pred) {
+  plot_lift <- function(prep_pred, best_bet = FALSE) {
     # Plot lift curve
     #
     # Args:
     # prep_pred: List containing Forecast and Actual dataframe (output from prepare_predictions)
+    # best_bet: whether to compute the lift for the best bet (regardless of whether it's A, D or H; 0, 1, 2, ...)
     #
     # Returns:
     # Ggplot
@@ -446,47 +447,87 @@ if (FALSE) {
     id_lbl <- c("Game", "HomeTeam", "AwayTeam")
     val <- setdiff(colnames(prep_pred$Forecast), id_lbl)
     
-    if (length(val) < 9) {
-      palette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
-    } else {
-      getPalette <- colorRampPalette(rev(RColorBrewer::brewer.pal(9, "Set1"))) # to extend colour palette
-      palette <- getPalette(length(val))
+    compute_lift <- function(f, a, p0) {
+      # Compute lift
+      #
+      # Args:
+      # f: dataframe of forecast
+      # a: dataframe of actual
+      # p0: base rate
+      #
+      # Returns:
+      # Dataframe of lift
+      
+      tmp <- merge(f, a, by = id_lbl)
+      tmp <- tmp[order(tmp$Forecast, decreasing = TRUE), ]
+      
+      PropBet <- (1:nrow(tmp)) / nrow(tmp)
+      PropWin <- cumsum(tmp$Actual) / (1:nrow(tmp))
+      Lift <- PropWin / p0
+      
+      data.frame(Game = tmp$Game, PropBet, PropWin, Lift)
     }
     
-    lift <- do.call(rbind,
-                    lapply(val,
-                           function(x) {
-                             f <- prep_pred$Forecast[, c("Game", "HomeTeam", "AwayTeam", x)]
-                             f <- change_colnames(f, x, "Forecast")
-                             a <- prep_pred$Actual[, c("Game", "HomeTeam", "AwayTeam", x)]
-                             a <- change_colnames(a, x, "Actual")
-                             
-                             tmp <- merge(f, a, by = c("Game", "HomeTeam", "AwayTeam"))
-                             tmp <- tmp[order(tmp$Forecast, decreasing = TRUE), ]
-                             
-                             PropBet <- (1:nrow(tmp)) / nrow(tmp)
-                             PropWin <- cumsum(tmp$Actual) / (1:nrow(tmp))
-                             Lift <- PropWin / mean(tmp$Actual)
-                             
-                             data.frame(Value = x, PropBet, PropWin, Lift)
-                           }))
-    lift$Value <- factor(lift$Value, levels = val)
+    if (!best_bet) {
+      
+      if (length(val) < 9) {
+        palette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+      } else {
+        getPalette <- colorRampPalette(rev(RColorBrewer::brewer.pal(9, "Set1"))) # to extend colour palette
+        palette <- getPalette(length(val))
+      }
+      
+      lift <- do.call(rbind,
+                      lapply(val,
+                             function(x) {
+                               f <- prep_pred$Forecast[, c(id_lbl, x)]
+                               f <- change_colnames(f, x, "Forecast")
+                               a <- prep_pred$Actual[, c(id_lbl, x)]
+                               a <- change_colnames(a, x, "Actual")
+                               
+                               tmp <- compute_lift(f, a, p0 = mean(a$Actual))
+                               tmp$Value <- x
+                               return(tmp)
+                             }))
+      lift$Value <- factor(lift$Value, levels = val)
+      
+      p <- ggplot(data = lift, aes(x = PropBet, y = Lift, colour = Value)) +
+        scale_colour_manual(values = palette)
+      
+    } else {
+      id <- apply(prep_pred$Forecast[, val], 1, which.max) # Bet on highest probability outcome
+      f <- prep_pred$Forecast[, id_lbl]
+      Value <- val[id]
+      f$Forecast <- NA
+      a <- prep_pred$Actual[, id_lbl]
+      a$Actual <- NA
+      
+      for (i in 1:nrow(f)) {
+        f$Forecast[i] <- prep_pred$Forecast[i, Value[i]]
+        a$Actual[i] <- prep_pred$Actual[i, Value[i]]
+      }
+      
+      lift <- compute_lift(f, a, p0 = 1 / length(val)) # p0 might be subject to discussion here
+      lift$Value <- Value
+      
+      p <- ggplot(data = lift, aes(x = PropBet, y = Lift))
+    }
     
-    ggplot(data = lift, aes(x = PropBet, y = Lift, colour = Value)) +
+    p +
       geom_line() +
       geom_hline(yintercept = 1) +
-      scale_colour_manual(values = palette) +
       labs(colour = "") +
       theme_bw(base_size = 15)
     
   }
   
-  plot_calibration <- function(prep_pred, CI = NULL) {
+  plot_calibration <- function(prep_pred, CI = NULL, pool = FALSE) {
     # Plot calibration
     #
     # Args:
     # prep_pred: List containing Forecast and Actual dataframe (output from prepare_predictions)
     # CI: confidence level in %. If NULL, confidence intervals are not computed.
+    # pool: whether to pool/combine the values for the plot
     #
     # Returns:
     # Ggplot
@@ -495,36 +536,57 @@ if (FALSE) {
     id_lbl <- c("Game", "HomeTeam", "AwayTeam")
     val <- setdiff(colnames(prep_pred$Forecast), id_lbl)
     
-    cal <- do.call(rbind,
-                   lapply(val,
-                          function(x) {
-                            tmp <- HuraultMisc::compute_calibration(prep_pred$Forecast[, x],
-                                                                    prep_pred$Actual[, x],
-                                                                    method = "smoothing",
-                                                                    CI = CI)
-                            tmp$Value <- x
-                            return(tmp)
-                          }))
-    
-    if (length(val) < 8) {
-      palette <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+    if (!pool) {
+      cal <- do.call(rbind,
+                     lapply(val,
+                            function(x) {
+                              tmp <- HuraultMisc::compute_calibration(prep_pred$Forecast[, x],
+                                                                      prep_pred$Actual[, x],
+                                                                      method = "smoothing",
+                                                                      CI = CI)
+                              tmp$Value <- x
+                              return(tmp)
+                            }))
+      
+      if (length(val) < 8) {
+        palette <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+      } else {
+        getPalette <- colorRampPalette(rev(RColorBrewer::brewer.pal(9, "Set1"))) # to extend colour palette
+        palette <- getPalette(length(val))
+      }
+      
+      p <- ggplot(data = cal, aes(x = Forecast, y = Frequency, colour = Value)) +
+        scale_colour_manual(values = palette)
+      
     } else {
-      getPalette <- colorRampPalette(rev(RColorBrewer::brewer.pal(9, "Set1"))) # to extend colour palette
-      palette <- getPalette(length(val))
+      
+      f <- prep_pred$Forecast[, val]
+      a <- prep_pred$Actual[, val]
+      cal <- HuraultMisc::compute_calibration(c(as.matrix(f)),
+                                              c(as.matrix(a)),
+                                              method = "smoothing",
+                                              CI = CI)
+      
+      p <- ggplot(data = cal, aes(x = Forecast, y = Frequency))
+      
     }
     
-    p <- ggplot(data = cal, aes(x = Forecast, y = Frequency, colour = Value)) +
+    p <- p +
       geom_line() +
-      scale_colour_manual(values = palette) +
       geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
       coord_cartesian(xlim = c(0, 1), ylim = c(0, 1)) +
       labs(colour = "", fill = "") +
       theme_bw(base_size = 15)
     
     if (!is.null(CI)) {
-      p <- p +
-        geom_ribbon(aes(ymin = Lower, ymax = Upper, fill = Value), alpha = 0.5) +
-        scale_fill_manual(values = palette)
+      if (!pool) {
+        p <- p +
+          geom_ribbon(aes(ymin = Lower, ymax = Upper, fill = Value), alpha = 0.5) +
+          scale_fill_manual(values = palette)
+      } else {
+        p <- p +
+          geom_ribbon(aes(ymin = Lower, ymax = Upper), alpha = 0.5)
+      }
     }
     return(p)
     
@@ -535,18 +597,22 @@ if (FALSE) {
   l2 <- prepare_predictions(pred = pred0, act = fd, test_game = setdiff(fd$Game, fd_train$Game), var = "FTHG")
   m <- compute_metrics(pred = pred0, act = fd, test_game = setdiff(fd$Game, fd_train$Game), var = "FTR")
   
-  plot_lift(l1)
-  plot_calibration(l1, NULL)
-  plot_calibration(l1, CI = 0.95)
-  # plot_lift(l2)
-  # plot_calibration(l2, NULL)
-
+  plot_lift(l1) + theme(legend.position = "top")
+  plot_calibration(l1, CI = NULL)
+  plot_calibration(l1, CI = 0.95, pool = TRUE)
+  # plot_lift(l2, best_bet = TRUE)
+  # plot_calibration(l2, CI = NULL)
+  
   # TO DO
-  # option to combine all values for plot_lift and plot_calibration
   # option to compute FTG in plot_lift and plot_calibration
   
-
-
-
+  # problem with loess in plot_calibration for l2 (probably because of few outcomes)
+  
+  # strange that for test games, we can be sure in the prediction that the team will score N goals (e.g. 8, and be right!)
+  # not problem with game id apparently
+  # and teams have played enough not to overfit
+  # OK, apparently it's because the saved results doesn't correspond to "test_games": would need to save or change the script
+  
+  
 }
 
