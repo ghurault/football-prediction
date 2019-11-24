@@ -6,13 +6,13 @@ Models for predicting the outcomes of football games in Stan, using publicly ava
 
 Here, I implemented a simple Dixon-Coles model where we assume that the number of goals scored by each team follow independent Poisson distributions.
 
-For each game, if we index the home team by `h` and the away team by `a`, then the rates of the Poisson distribution is given by:
+For each game, if we index the home team by `h` and the away team by `a`, then the rates of the Poisson distribution are given by:
 
 <img src="https://latex.codecogs.com/gif.latex?$$\log(\lambda_h)&space;=&space;b&space;&plus;&space;\mathit{advtg}&space;&plus;&space;\mathit{attack_h}&space;-&space;\mathit{defence_a}&space;$$" title="$$\log(\lambda_h) = b + \mathit{advtg} + \mathit{attack_h} - \mathit{defence_a} $$" />
 
 <img src="https://latex.codecogs.com/gif.latex?$$\log(\lambda_a)&space;=&space;b&space;&plus;&space;\mathit{attack_a}&space;-&space;\mathit{defence_h}&space;$$" title="$$\log(\lambda_a) = b + \mathit{attack_a} - \mathit{defence_h} $$" />
 
-Where `b` is the intercept (logarithm of the average goals rate assuming the attack and defence abilities of the teams cancels out), `advtg`}$` is the home advantage., and `attack` and `defence` are the vectors containing the latent attack and defence abilities for each team
+Where `b` is the intercept (logarithm of the average goals rate assuming the attack and defence abilities of the teams cancels out), `advtg` is the home advantage, and `attack` and `defence` are the vectors containing the latent attack and defence abilities for each team.
 
 The model is available in `Models/mdl1.stan`.
 
