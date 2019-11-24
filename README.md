@@ -19,7 +19,7 @@ For each game, if we index the home team by `h` and the away team by `a`, then t
 
 Where `b` is the intercept (logarithm of the average goals rate assuming the attack and defence abilities of the teams cancels out), `advtg` is the home advantage, and `attack` and `defence` are the vectors containing the latent attack and defence abilities for each team.
 
-The model is available in `Models/mdl1.stan`.
+The model is available in [`Models/mdl1.stan`](Models/mdl1.stan).
 
 ## Workflow
 
@@ -45,11 +45,11 @@ I have also written functions to evaluate the quality of the predictions (whethe
 
 Utility functions are available in [`functions.R`](functions.R).
 
-At the moment, the script [`prior_pred_check.R`] is the most complete one.
+At the moment, the script [`prior_pred_check.R`](prior_pred_chec.R) is the most complete one.
 It implements prior predictive check, fake data check as well as the pipeline to evaluate predictions.
 The script notably tests all the functions on simulated data.
 
-The model is fitted to real data in `fitting.R` and posterior predictive check is performed.
+The model is fitted to real data in [`fitting.R`](fitting.R) and posterior predictive check is performed.
 
 A validation script implementing forward chaining to evaluate the predictive performance of the model will be available soon.
 
