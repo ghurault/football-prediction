@@ -106,6 +106,27 @@ if (FALSE) {
   quantile(goals, probs = c(.25, .5 , .75, .9, .99, .999))
   mean(goals >= 20) # proportion of games with home/away goals greater than 20
   
+  # Probability of wins/draws/lose
+  lapply(c("win", "lose", "draw"),
+         function(x) {
+           otc <- extract(fit_prior, pars = paste0(x, "_rep[1]"))[[1]]
+           otc <- table(otc) / length(otc)
+           ggplot(data = data.frame(otc), aes(x = otc, y = Freq)) +
+             geom_bar(stat = "identity") +
+             scale_x_discrete(breaks = 1:(2 * (n_teams - 1))) +
+             labs(x = paste0("Number of ", x), y = "Prior probability") +
+             theme_bw(base_size = 15)
+         })
+  
+  # Ranks
+  rk <- compute_rank(fit_prior, "rep")[, 1]
+  rk <- table(rk) / length(rk)
+  ggplot(data =  data.frame(rk), aes(x = rk, y = Freq)) +
+    geom_bar(stat = "identity") +
+    scale_x_discrete(breaks = 1:n_teams) +
+    labs(x = "Rank", y = "Prior probability") +
+    theme_bw(base_size = 15)
+  
 }
 
 # Generate fake data ------------------------------------------------------
