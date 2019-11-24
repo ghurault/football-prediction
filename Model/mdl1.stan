@@ -39,7 +39,6 @@ transformed data {
   for (i in 1:N_games) {
     is_played[get_test_id(home_id[i], away_id[i], N_teams)] = 1;
   }
-  
 }
 
 parameters {
@@ -51,7 +50,7 @@ parameters {
 }
 
 transformed parameters {
-  // Define abilities for all possible gains, convenient because everything is defined only once
+  // Define abilities for all possible games, convenient because everything is defined only once
   matrix[N_teams, N_teams] home_linpred;
   matrix[N_teams, N_teams] away_linpred;
   vector[N_games] home_linpred1;
@@ -82,7 +81,6 @@ model {
     home_goals ~ poisson_log(home_linpred1);
     away_goals ~ poisson_log(away_linpred1);
   }
-  
 }
 
 generated quantities {
@@ -203,5 +201,4 @@ generated quantities {
     goal_diff_test = goal_diff_home_test + goal_diff_away_test;
     point_test = 3 * win_test + draw_test;
   }
-  
 }
