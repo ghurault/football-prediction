@@ -32,7 +32,7 @@ Notably, I implemented functions to look at the posterior, prior or predictive (
 I have also written functions to evaluate the quality of the predictions (whether the predictions are for the outcome of a game or the number of goals scored during the game) by looking at:
 
 - the Ranked Probability Score (RPS) and "cumulative" log-loss (cf. ordinal outcomes)
-- the Brier Score (BS) and log-loos (cf. categorical outcomes)
+- the Brier Score (BS) and log-loss (cf. categorical outcomes)
 - calibration curves
 - lift curves
 
@@ -42,9 +42,9 @@ Utility functions are available in `functions.R`
 
 At the moment, the script `prior_pred_check.R` is the most complete one.
 It implements prior predictive check, fake data check as well as the pipeline to evaluate predictions.
-The script is here to test all the functions on simulated data.
+The script notably tests all the functions on simulated data.
 
-The model is fitted to real data in `fitting.R` and posterior predictive checks is performed.
+The model is fitted to real data in `fitting.R` and posterior predictive check is performed.
 
 A validation script implementing forward chaining to evaluate the predictive performance of the model will be available soon.
 
