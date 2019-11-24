@@ -45,7 +45,7 @@ I have also written functions to evaluate the quality of the predictions (whethe
 
 Utility functions are available in [`functions.R`](functions.R).
 
-At the moment, the script `prior_pred_check.R` is the most complete one.
+At the moment, the script [`prior_pred_check.R`] is the most complete one.
 It implements prior predictive check, fake data check as well as the pipeline to evaluate predictions.
 The script notably tests all the functions on simulated data.
 
