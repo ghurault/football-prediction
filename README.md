@@ -1,3 +1,8 @@
+<!-- badges: start -->
+[![Lifecycle: dormant](https://img.shields.io/badge/lifecycle-dormant-blue.svg)](https://www.tidyverse.org/lifecycle/#dormant)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<!-- badges: end -->
+
 # Football prediction model [on hold]
 
 Models for predicting the outcomes of football games in Stan, using publicly available [football data](http://football-data.co.uk/).
