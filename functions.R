@@ -238,6 +238,34 @@ check_estimates <- function(par, true_param, param_pop, param_ind) {
 
 # Analyse posterior ---------------------------------------------
 
+plot_abilities <- function(par) {
+  # Plot attack and defence estimates (ordered by best attack)
+  #
+  # Args:
+  # par: parameters dataframe
+  #
+  # Returns:
+  # Ggplot
+  
+  library(ggplot2)
+  
+  atc <- subset(par, Variable == "attack")
+  dfc <- subset(par, Variable == "defence")
+  
+  # Order teams by best attack
+  ord <- atc$Team[order(atc$Mean)]
+  atc$Team <- factor(atc$Team, levels = ord)
+  dfc$Team <- factor(dfc$Team, levels = ord)
+  
+  ggplot(data = rbind(atc, dfc),
+         aes(x = Team, y = Mean, ymin = `5%`, ymax = `95%`)) +
+    geom_pointrange() +
+    facet_grid(cols = vars(Variable)) +
+    coord_flip() +
+    labs(x = "", y = "") +
+    theme_bw(base_size = 15)
+}
+
 PPC_football_stats <- function(fit, stat_name, fstats, teams, order = FALSE) {
   # Plot posterior predictive checks of some football statistics (number of something)
   #
