@@ -53,5 +53,5 @@ The model is fitted to real data in [`fitting.R`](fitting.R) and posterior predi
 
 A validation script implementing forward chaining to evaluate the predictive performance of the model will be available soon.
 
-In addition, I lay down a few ideas for model improvement in the `Projects` tab of this repository.
+In addition, I lay down a few ideas for model improvement in the [`Projects` tab of this repository](https://github.com/ghurault/football-prediction/projects/1).
 
