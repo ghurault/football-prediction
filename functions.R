@@ -480,7 +480,7 @@ compute_metrics <- function(pred, act, test_game, var) {
   # pred: prediction dataframe
   # act: actual (observed outcome) dataframe
   # test_game: vector of test game ID
-  # var: character corresponding to the variable to consider: FTR, FTHG or FTAG
+  # var: character corresponding to the variable to consider: FTR, FTHG, FTAG or FTG
   #
   # Returns:
   # Dataframe of metrics
