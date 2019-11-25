@@ -269,16 +269,14 @@ if (FALSE) {
   stackhist_rank(compute_rank(fit_pred, "test"), teams)
   
   pred0 <- process_predictions(fit_pred, id)
-  
   # Evaluate FTR predictions
   m1 <- compute_metrics(pred = pred0, act = fd, test_game = setdiff(fd$Game, fd_train$Game), var = "FTR")
   l1 <- prepare_predictions(pred = pred0, act = fd, test_game = setdiff(fd$Game, fd_train$Game), var = "FTR")
   plot_lift(l1) + theme(legend.position = "top")
   plot_calibration(l1, CI = NULL)
   plot_calibration(l1, CI = 0.95, pool = TRUE)
-  
   # Evaluate goals predictions
-  l2 <- prepare_predictions(pred = pred0, act = fd, test_game = setdiff(fd$Game, fd_train$Game), var = "FTHG")
+  # l2 <- prepare_predictions(pred = pred0, act = fd, test_game = setdiff(fd$Game, fd_train$Game), var = "FTHG")
   # plot_lift(l2, best_bet = TRUE)
   # plot_calibration(l2, CI = NULL) # problem with loess in plot_calibration for l2 (probably because of few outcomes)
   
