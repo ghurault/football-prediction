@@ -530,7 +530,8 @@ compute_metrics <- function(pred, act, test_game, var) {
   
   # Return metric per prediction (need to include additional info for FTG then) or average?
   data.frame(Metric = c("RPS", "CumLogLoss", "BrierScore", "LogLoss"),
-             Value = sapply(list(RPS, CumLogLoss, BrierScore, LogLoss), mean),
+             Mean = sapply(list(RPS, CumLogLoss, BrierScore, LogLoss), mean),
+             SE = sapply(list(RPS, CumLogLoss, BrierScore, LogLoss), function(x) {sd(x) / sqrt(length(x))}),
              Variable = var)
   # cbind(f[, col_id],
   #       data.frame(RPS, CumLogLoss, BrierScore, LogLoss))
