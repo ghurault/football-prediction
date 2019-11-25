@@ -116,7 +116,7 @@ game_id <- function(teams) {
   
   n_teams <- length(teams)
   n_games <- n_teams * (n_teams - 1)
-  out <- data.frame(Game = 1:n_games)
+  out <- data.frame(Game = 1:n_games, HomeTeam = NA, AwayTeam = NA)
   i <- 1
   for (ht in 1:n_teams) {
     for (at in 1:n_teams) {
