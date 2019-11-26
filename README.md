@@ -19,7 +19,7 @@ For each game, if we index the home team by `h` and the away team by `a`, then t
 
 Where `b` is the intercept (logarithm of the average goals rate assuming the attack and defence abilities of the teams cancels out), `advtg` is the home advantage, and `attack` and `defence` are the vectors containing the latent attack and defence abilities for each team.
 
-The model is available in [`Models/mdl1.stan`](Models/mdl1.stan), where priors choices are motivated in the comments.
+The model is available in [`Model/mdl1.stan`](Model/mdl1.stan), where priors choices are motivated in the comments.
 
 While the model is simple (but could be easily extended given time), I see my main contribution is on the quantities that we can generate, notably important statistics that the model can predict (cf. suffix `_test`) or that can be used for posterior predictive checking (cf. suffix `rep`):
 
