@@ -105,7 +105,7 @@ if (run) {
   writeLines(c(""), "log.txt")
   
   out <- foreach(w = 1:(length(weeks) - 1)) %dopar% {
-
+    
     source("functions.R")
     library(rstan)
     rstan_options(auto_write = TRUE) # Save compiled model
@@ -127,13 +127,25 @@ if (run) {
     par$WeekNumber <- weeks[w]
     par$ProportionGamePlayed <- nrow(sub_df) / nrow(df)
     
+    # Rank
+    rk <- compute_rank(fit, "test")
+    rk <- do.call(rbind,
+                  lapply(1:length(teams),
+                         function(i) {
+                           tmp <- table(factor(rk[, i], levels = 1:length(teams))) / nrow(rk)
+                           data.frame(Team = teams[i], Rank = names(tmp), Probability = as.numeric(tmp))
+                         }))
+    rk <- HuraultMisc::factor_to_numeric(rk, "Rank")
+    rk$WeekNumber <- weeks[w]
+    rk$ProportionGamePlayed <- nrow(sub_df) / nrow(df)
+    
     # Metrics
     pred <- process_predictions(fit, id)
     m <- compute_metrics(pred = pred, act = df, test_game = test_game, var = "FTR")
     m$WeekNumber <- weeks[w]
     m$ProportionGamePlayed <- nrow(sub_df) / nrow(df)
     
-    list(Performance = m, Parameters = par)
+    list(Performance = m, Parameters = par, Rank = rk)
   }
   stopCluster(cl)
   (duration = Sys.time() - duration)
@@ -145,6 +157,7 @@ if (run) {
 
 m <- do.call(rbind, lapply(out, function(x) {x$Performance}))
 par <- do.call(rbind, lapply(out, function(x) {x$Parameters}))
+rk <- do.call(rbind, lapply(out, function(x) {x$Rank}))
 
 # Analysis ----------------------------------------------------------------
 
@@ -153,30 +166,57 @@ if (flag) {
   
   # Evolution of RPS (FTR) as a function of WeekNumber or ProportionGamePlayed
   pl1 <- lapply(unique(m$Metric),
-         function(x) {
-           ggplot(data = subset(m, Metric == x),
-                  aes(x = ProportionGamePlayed, y = Mean, ymin = Mean - SE, ymax = Mean + SE)) +
-             geom_pointrange() +
-             scale_y_continuous(limits = c(0, NA)) +
-             labs(y = x) +
-             theme_bw(base_size = 15) # + theme(axis.text.x = element_text(angle = 90))
-         })
+                function(x) {
+                  ggplot(data = subset(m, Metric == x),
+                         aes(x = ProportionGamePlayed, y = Mean, ymin = Mean - SE, ymax = Mean + SE)) +
+                    geom_pointrange() +
+                    scale_y_continuous(limits = c(0, NA)) +
+                    labs(y = x) +
+                    theme_bw(base_size = 15) # + theme(axis.text.x = element_text(angle = 90))
+                })
   plot_grid(plotlist = pl1, nrow = 2)
   
-  # Evolution of belief in population parameters
-  pl2 <- lapply(param_pop,
+  # Evolution of predictions of rank
+  rk <- rbind(data.frame(expand.grid(Team = teams, Rank = 1:length(teams)),
+                         Probability = 1 / length(teams), WeekNumber = strftime(min(df[["Date"]]) - 7, format = "%Y-%V"), ProportionGamePlayed = 0), # add first week
+              rk)
+  tmp <- data.frame(expand.grid(Team = teams, Rank = 1:length(teams)),
+                    Probability = 0, WeekNumber = weeks[length(weeks)], ProportionGamePlayed = 1)
+  for (i in 1:nrow(fstats)) {
+    id <- which((tmp[["Team"]] == fstats[i, "Team"]) & (tmp[["Rank"]] == fstats[i, "rank"]))
+    tmp[id, "Probability"] <- 1
+  }
+  rk <- rbind(rk, tmp) # add last week
+  pl2 <- lapply(teams,
          function(x) {
-           ggplot(data = subset(par, Variable == x),
-                  aes(x = ProportionGamePlayed, y = Mean, ymin = `5%`, ymax = `95%`)) +
-             geom_pointrange() +
-             labs(y = x) +
-             theme_bw(base_size = 15)
+           ggplot(data = subset(rk, Team == x),
+                  aes(x = factor(ProportionGamePlayed), y = Rank, fill = Probability)) + # use factor because hard to make tiles of varying width...
+             geom_tile() +
+             scale_fill_viridis_c() +
+             scale_y_continuous(expand = c(0, 0), breaks = 1:length(teams)) +
+             scale_x_discrete(expand = c(0, 0), breaks = c(0, 1)) +
+             labs(title = x, x = "Proportion of game played*") + # * not exactly but close
+             theme_classic(base_size = 15)
          })
-  plot_grid(plotlist = pl2, nrow = 2)
+  plot_grid(get_legend(pl2[[1]] + theme(legend.position = "top")),
+            plot_grid(plotlist = lapply(pl2, function(x) {x + theme(legend.position = "none")}),
+                      nrow = 5),
+            nrow = 2, rel_heights = c(.05, .95))
+
+  # Evolution of belief in population parameters
+  pl3 <- lapply(param_pop,
+                function(x) {
+                  ggplot(data = subset(par, Variable == x),
+                         aes(x = ProportionGamePlayed, y = Mean, ymin = `5%`, ymax = `95%`)) +
+                    geom_pointrange() +
+                    labs(y = x) +
+                    theme_bw(base_size = 15)
+                })
+  plot_grid(plotlist = pl3, nrow = 2)
   
   # Evolution of belief in abilities
   tmp <- subset(par, Variable %in% c("attack", "defence"))
-  pl3 <- lapply(teams, function(x) {
+  pl4 <- lapply(teams, function(x) {
     cbbPalette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
     ggplot(data = subset(tmp, Team == x), 
            aes(x = ProportionGamePlayed, y = Mean, ymin = `5%`, ymax = `95%`, colour = Variable, fill = Variable)) +
@@ -188,8 +228,8 @@ if (flag) {
       coord_cartesian(ylim = c(-1, 1)) +
       theme_bw(base_size = 15)
   })
-  plot_grid(get_legend(pl3[[1]] + theme(legend.position = "top")),
-            plot_grid(plotlist = lapply(pl3, function(p) {p + theme(legend.position = "none")}),
+  plot_grid(get_legend(pl4[[1]] + theme(legend.position = "top")),
+            plot_grid(plotlist = lapply(pl4, function(p) {p + theme(legend.position = "none")}),
                       nrow = 5),
             nrow = 2, rel_heights = c(.05, .95))
   
@@ -214,5 +254,5 @@ if (flag) {
   l2 <- prepare_predictions(pred = pred, act = df, test_game = test_game, var = "FTHG")
   plot_lift(l2, best_bet = TRUE)
   # plot_calibration(l2, CI = NULL) # problem with loess in plot_calibration for l2 (probably because of few outcomes)
-
+  
 }
