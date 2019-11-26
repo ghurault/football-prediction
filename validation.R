@@ -210,5 +210,9 @@ if (flag) {
   plot_lift(l1) + theme(legend.position = "top")
   plot_calibration(l1, CI = NULL)
   plot_calibration(l1, CI = 0.95, pool = TRUE)
+  # Calibration and lift for goals (FTHG, FTAG)
+  l2 <- prepare_predictions(pred = pred, act = df, test_game = test_game, var = "FTHG")
+  plot_lift(l2, best_bet = TRUE)
+  # plot_calibration(l2, CI = NULL) # problem with loess in plot_calibration for l2 (probably because of few outcomes)
 
 }
