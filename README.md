@@ -19,12 +19,9 @@ For each game, if we index the home team by `h` and the away team by `a`, then t
 
 Where `b` is the intercept (logarithm of the average goals rate assuming the attack and defence abilities of the teams cancels out), `advtg` is the home advantage, and `attack` and `defence` are the vectors containing the latent attack and defence abilities for each team.
 
-The model is available in [`Models/mdl1.stan`](Models/mdl1.stan).
+The model is available in [`Models/mdl1.stan`](Models/mdl1.stan), where priors choices are motivated in the comments.
 
-## Workflow
-
-For the moment, I have mainly focused on preparing the workflow for evaluating the models.
-Notably, I implemented functions to look at the posterior, prior or predictive (including games already played and games to play) distribution for:
+While the model is simple (but could be easily extended given time), I see my main contribution is on the quantities that we can generate, notably important statistics that the model can predict (cf. suffix `_test`) or that can be used for posterior predictive checking (cf. suffix `rep`):
 
 - the number of games won
 - the number of games lost
@@ -34,24 +31,43 @@ Notably, I implemented functions to look at the posterior, prior or predictive (
 - the number of points
 - the ranking
 
-I have also written functions to evaluate the quality of the predictions (whether the predictions are for the outcome of a game or the number of goals scored during the game) by looking at:
-
-- the Ranked Probability Score (RPS) and "cumulative" log-loss (cf. ordinal outcomes)
-- the Brier Score (BS) and log-loss (cf. categorical outcomes)
-- calibration curves
-- lift curves
-
-## Repository roadmap
+## Workflow
 
 Utility functions are available in [`functions.R`](functions.R).
 
-At the moment, the script [`prior_pred_check.R`](prior_pred_chec.R) is the most complete one.
-It implements prior predictive check, fake data check as well as the pipeline to evaluate predictions.
-The script notably tests all the functions on simulated data.
+The script [`prior_pred_check.R`](prior_pred_check.R) contains:
+
+- Prior predictive check, to check whether the choice of priors leads to reasonable simulations in terms of the number/rate of goals scored, the probability of winning x games in the season, the position in the ranking, etc.
+- Fake data check, to check whether we can estimate the model from data simulated from the proposed generative process (i.e. to check whether the inference process works).
+I notably checked whether the estimated parameters are "close" to the true parameters, and the coverage probability of the hierarchical parameters.
+Simulation-Based Calibration could then be implemented to extend this.
+- The pipeline to generate and evaluate predictions (more details below).
 
 The model is fitted to real data in [`fitting.R`](fitting.R) and posterior predictive check is performed.
 
-A validation script implementing forward chaining to evaluate the predictive performance of the model will be available soon.
+The predictive performance of the model is computed in [`validation.R`](validation.R) using forward chaining: the model is trained with the data from the first week and tested on the remaining games, then trained on the data from the first two weeks and tested on the remaining games, etc.
 
-In addition, I lay down a few ideas for model improvement in the [`Projects` tab of this repository](https://github.com/ghurault/football-prediction/projects/1).
+We assessed performance using:
 
+- the Ranked Probability Score (RPS) and "cumulative" log-loss.
+Both are scoring rules, i.e. metrics to assess the accuracy of a probabilistic forecast, and designed for ordinal data: e.g. Lose < Draw < Win.
+- the Brier Score (BS) and log-loss.
+These are the categorical version of the previous scoring rules for categorical outcomes, but the ordinal metrics are to be preferred.
+- calibration curves
+- lift curves
+
+## Brier summary of results and future directions
+
+The model is successfully fit to the data and can gives valuable insights into the teams abilities.
+
+When testing the predictive performance of the model, interestingly we find that the predictive performance becomes much better after the mid-season.
+
+What I find particularly interesting is that we could predict how the predicted rank at the end of the season can change as more games are being played.
+
+However, when trained on the full dataset, the parameters, notably the abilities, are still quite uncertain.
+It does not seem to hurt much the predictions for the outcome of a game (lose, draw, win) as what mostly matters for this is how the abilities of one team compares to the abilities of the other team.
+Still, the model does not accurately predict the number of goals scored.
+
+In conclusion, this was a fun side project for me, a good way to work with "clean" data and learn about the Bayesian workflow.
+However, at the moment of writing, I don't have the time or domain expertise to design a good enough model to be used for betting (and if the goal was betting, designing models for individual sports, or thing like darts or horse racing would probably be safer as the outcomes are less uncertain).
+I nonetheless lay down a few ideas for improving the model in the [`Projects` tab of this repository](https://github.com/ghurault/football-prediction/projects/1).
