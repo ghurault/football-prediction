@@ -72,9 +72,13 @@ model {
   // Priors
   b ~ normal(0, 0.5); // exp(b) is average number of goals in situation where attack and defence cancels out, prior between e^-1 and e^1
   home_advantage ~ normal(0.5, 0.25); // Home advantage assume to be positive but not excessive
+  
   attack ~ normal(0, sigma_ability);
   defence ~ normal(0, sigma_ability);
-  sigma_ability ~ normal(0, log(10) / 2.3 / sqrt(2)); // If attack independent from defence, (attack - defence follow) N(0, sqrt(2) * sigma_ability). A situation at the upper tail of distribution, the team would score exp(2 * sqrt(2) * sigma_ability) more goals, for instance 10 times
+  // If attack independent from defence, (attack - defence follow) N(0, sqrt(2) * sigma_ability).
+  // A situation at the upper tail of distribution (e.g. 99% quantile, z=2.3), the team would score exp(2.3 * sqrt(2) * sigma_ability) more goals.
+  // Considering the prior for intercept (where it is possible that the rate of goals could be > 1), we could target *5 times increase
+  sigma_ability ~ normal(0, log(5) / 2.3 / sqrt(2));
   
   // Likelihood
   if (run == 1) {
