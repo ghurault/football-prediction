@@ -19,7 +19,7 @@ options(mc.cores = parallel::detectCores()) # Parallel computing
 
 data_file <- "Data/PremierLeague1819.csv"
 
-stan_code <- "Model/mdl1.stan"
+stan_code <- "Model/DC_model.stan"
 
 run <- TRUE
 res_file <- "Results/fit_mdl1.rds"

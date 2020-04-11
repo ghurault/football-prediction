@@ -20,7 +20,7 @@ run_prior <- TRUE
 run_fake <- TRUE
 run_pred <- TRUE
 
-stan_code <- "Model/mdl1.stan"
+stan_code <- "Model/DC_model.stan"
 
 prior_file <- "Results/prior_mdl1.rds"
 fake_file <- "Results/fake_mdl1.rds"
