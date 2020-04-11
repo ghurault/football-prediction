@@ -7,6 +7,8 @@
 
 Models for predicting the outcomes of football games in Stan, using publicly available [football data](http://football-data.co.uk/).
 
+**[Notebook in progress](https://ghurault.github.io/football-prediction/overview.nb.html)**
+
 ## Model
 
 Here, I implemented a simple Dixon-Coles model where we assume that the number of goals scored by each team follow independent Poisson distributions.
