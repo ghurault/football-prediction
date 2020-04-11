@@ -36,6 +36,7 @@ vignettes/*.pdf
 rsconnect/
 
 # Custom
+README.html
 Results/*
 Model/*.rds
 log.txt
