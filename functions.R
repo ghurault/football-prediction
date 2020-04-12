@@ -336,16 +336,26 @@ PPC_football_stats <- function(fit, stat_name, fstats, teams, order = FALSE) {
     out$Team <- factor(out$Team, levels = teams[order(fstats[[fstat_name]])])
   }
   
-  ggplot(data = out, aes(x = N, y = Probability, fill = Actual)) +
+  p <- ggplot(data = out, aes(x = N, y = Probability, fill = Actual)) +
     scale_fill_manual(values = c("#000000", "#E69F00")) +
     geom_bar(stat = "identity") +
-    facet_grid(rows = vars(Team)) +
-    labs(x = fstat_name,
-         title = paste("<b>Posterior replications</b> of", fstat_name, "vs <b style=color:'#E69F00'>observed value</b>")) +
+    facet_grid(rows = vars(Team))
+  if (sfx == "rep") {
+    p <- p +
+      labs(x = fstat_name,
+           title = paste("<b>Posterior replications</b> of", fstat_name, "vs <b style=color:'#E69F00'>observed value</b>"))
+  } else if (sfx == "test") {
+    p <- p +
+      labs(x = fstat_name,
+           title = paste("<b>Prediction</b> of", fstat_name, "vs <b style=color:'#E69F00'>observed value</b>"))
+  }
+  p <- p +
     theme_bw(base_size = 15) +
     theme(legend.position = "none",
           plot.title = element_markdown(),
           plot.title.position = "plot")
+    
+  return(p)
 }
 
 stackhist_rank <- function(rank_rep, teams) {
@@ -547,18 +557,17 @@ compute_metrics <- function(pred, act, test_game, var) {
   d <- min(Forecast[Forecast != 0]) / 100 # to avoid log(0)
   
   RPS <- apply((CumActual - CumForecast)^2, 1, sum) / (K - 1)
-  CumLogLoss <- -apply(CumActual * log(pmax(CumForecast, d)), 1, sum) / (K - 1)
-  
+
   BrierScore <- apply((Actual - Forecast)^2, 1, mean) # Between 0 and 2 (regardless of the number of categories)
   LogLoss <- -apply(Actual * log(Forecast + d), 1, mean)
   
   # Return metric per prediction (need to include additional info for FTG then) or average?
-  data.frame(Metric = c("RPS", "CumLogLoss", "BrierScore", "LogLoss"),
-             Mean = sapply(list(RPS, CumLogLoss, BrierScore, LogLoss), mean),
-             SE = sapply(list(RPS, CumLogLoss, BrierScore, LogLoss), function(x) {sd(x) / sqrt(length(x))}),
+  data.frame(Metric = c("RPS", "BrierScore", "LogLoss"),
+             Mean = sapply(list(RPS, BrierScore, LogLoss), mean),
+             SE = sapply(list(RPS, BrierScore, LogLoss), function(x) {sd(x) / sqrt(length(x))}),
              Variable = var)
   # cbind(f[, col_id],
-  #       data.frame(RPS, CumLogLoss, BrierScore, LogLoss))
+  #       data.frame(RPS, BrierScore, LogLoss))
 }
 
 plot_lift <- function(prep_pred, best_bet = FALSE) {
