@@ -10,6 +10,7 @@ heatmap_results <- function(df) {
   # Ggplot2
   
   library(ggplot2)
+  library(ggtext)
   palette <- c("#fc8d59", "#ffffbf", "#91bfdb")
   
   teams <- with(df, sort(unique(c(as.character(HomeTeam), as.character(AwayTeam)))))
@@ -17,12 +18,20 @@ heatmap_results <- function(df) {
   df$AwayTeam <- factor(df$AwayTeam, levels = teams)
   df$FTR <- factor(df$FTR, levels = c("A", "D", "H"), ordered = TRUE)
   
-  
   ggplot(data = df, aes(x = AwayTeam, y = HomeTeam, fill = FTR)) +
     geom_raster() +
     scale_fill_manual(values = palette) +
+    labs(x = "Away team",
+         y = "Home team",
+         title = "Full time results",
+         subtitle = "<b style='color:#91bfdb'>Home win</b>,
+         <b style='color:#fc8d59'>Away win</b>,
+         <b style='color:#ffffbf'>Draw</b>") +
     theme_classic(base_size = 15) +
-    theme(axis.text.x = element_text(angle = 90))
+    theme(plot.subtitle = element_markdown(),
+          plot.title.position = "plot",
+          legend.position = "none",
+          axis.text.x = element_text(angle = 90))
 }
 
 football_stats <- function(df) {
@@ -65,13 +74,13 @@ football_stats <- function(df) {
                       })
   # Goal
   goal_tot_home <- sapply(teams,
-                      function(teamName) {
-                        with(subset(df, HomeTeam == teamName), sum(FTHG))
-                      })
+                          function(teamName) {
+                            with(subset(df, HomeTeam == teamName), sum(FTHG))
+                          })
   goal_tot_away <- sapply(teams,
-                      function(teamName) {
-                        with(subset(df, AwayTeam == teamName), sum(FTAG))
-                      })
+                          function(teamName) {
+                            with(subset(df, AwayTeam == teamName), sum(FTAG))
+                          })
   # Goal difference (goal scored - goal conceded)
   goal_diff_home <- sapply(teams,
                            function(teamName) {
@@ -148,7 +157,7 @@ extract_parameters <- function(fit, param, param_ind, param_obs, teams, games, d
   par <- HuraultMisc::summary_statistics(fit, param)
   par$Team <- NA
   par$Game <- NA
-
+  
   ## Team dependent parameters
   for (i in intersect(param_ind, param)) {
     idx <- which(par$Variable == i)
@@ -160,7 +169,7 @@ extract_parameters <- function(fit, param, param_ind, param_obs, teams, games, d
     idx <- which(par$Variable == i)
     par$Game[idx] <- games[par$Index[idx]]
   }
-
+  
   par$Index <- NULL
   return(par)
 }
@@ -202,11 +211,12 @@ check_estimates <- function(par, true_param, param_pop, param_ind) {
   # List of Ggplot: one plot for population parameter and other plot for each team parameter
   
   library(ggplot2)
+  library(ggtext)
   
   tmp <- merge(subset(par, Variable %in% c(param_pop, param_ind)),
                true_param,
                by = c("Variable", "Team"))
-  prop90 <- with(tmp, mean(True > `5%` & Mean < `95%`)) # Proportion of true values in 90% CI
+  cov <- with(tmp, mean(True > `5%` & Mean < `95%`)) # Proportion of true values in 90% CI (coverage)
   
   # Population parameters
   p1 <- ggplot(data = subset(tmp, Variable %in% param_pop),
@@ -214,8 +224,13 @@ check_estimates <- function(par, true_param, param_pop, param_ind) {
     geom_pointrange(aes(y = Mean, ymin = `5%`, ymax = `95%`)) +
     geom_point(aes(y = True), col = "#E69F00", size = 2) +
     coord_flip() +
-    labs(x = "", y = "Estimate") +
-    theme_bw(base_size = 20)
+    labs(x = "",
+         y = "",
+         title = "Can we retrieve the population parameters?",
+         subtitle = "<b>Posterior estimates</b> (mean and 90% CI) vs <b style='color:#E69F00'>true parameters</b>") +
+    theme_bw(base_size = 15) +
+    theme(plot.subtitle = element_markdown(),
+          plot.title.position = "plot")
   
   # Team parameters
   pl <- lapply(param_ind,
@@ -229,11 +244,16 @@ check_estimates <- function(par, true_param, param_pop, param_ind) {
                    geom_pointrange(aes(y = Mean, ymin = `5%`, ymax = `95%`)) +
                    geom_point(aes(y = True), col = "#E69F00", size = 2) +
                    coord_flip() +
-                   labs(y = par_name) +
-                   theme_bw(base_size = 15)
+                   labs(x = "",
+                        y = par_name,
+                        title = paste("Can we retrieve the", par_name, "parameters?"),
+                        subtitle = "<b>Posterior estimates</b> (mean and 90% CI) vs <b style='color:#E69F00'>true parameters</b>") +
+                   theme_bw(base_size = 15) +
+                   theme(plot.subtitle = element_markdown(),
+                         plot.title.position = "plot")
                })
   
-  return(c(list(p1), pl, prop90 = prop90))
+  return(c(list(p1), pl, Coverage = cov))
 }
 
 # Analyse posterior ---------------------------------------------
@@ -280,10 +300,11 @@ PPC_football_stats <- function(fit, stat_name, fstats, teams, order = FALSE) {
   # Ggplot
   
   library(ggplot2)
+  library(ggtext)
   
   sfx <- tail(strsplit(stat_name, "_")[[1]], 1)
   fstat_name <- gsub(paste("_", sfx, sep = ""), "", stat_name)
-
+  
   if (fstat_name != "rank") {
     tmp <- rstan::extract(fit, pars = stat_name)[[1]]
   } else {
@@ -319,9 +340,12 @@ PPC_football_stats <- function(fit, stat_name, fstats, teams, order = FALSE) {
     scale_fill_manual(values = c("#000000", "#E69F00")) +
     geom_bar(stat = "identity") +
     facet_grid(rows = vars(Team)) +
-    labs(x = fstat_name) +
+    labs(x = fstat_name,
+         title = paste("<b>Posterior replications</b> of", fstat_name, "vs <b style=color:'#E69F00'>observed value</b>")) +
     theme_bw(base_size = 15) +
-    theme(legend.position = "none")
+    theme(legend.position = "none",
+          plot.title = element_markdown(),
+          plot.title.position = "plot")
 }
 
 stackhist_rank <- function(rank_rep, teams) {
@@ -354,7 +378,7 @@ stackhist_rank <- function(rank_rep, teams) {
     scale_y_continuous(expand = c(0, 0)) +
     scale_fill_manual(values = getPalette(length(teams))) +
     labs(y = "Cumulative probability") +
-    theme_classic(base_size = 20)
+    theme_classic(base_size = 15)
 }
 
 # Validation --------------------------------------------------------------
