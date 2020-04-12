@@ -104,7 +104,7 @@ Priors for the parameters were chosen to be weakly informative and resulted in r
 
 - $b \sim \mathcal{N}(0, 0.5^2)$.
 This prior can be understood by considering a situation where the two teams have the same underlying attack and defence abilities and there is no home advantage, resulting in average goal rate of $\exp(b)$.
-As a rule of thumb, if we consider that $b$ ranges from -1 to 1 (approx. 95\% CI), then the average goal rate ranges follows a lognormal distribution ranging from $\exp(-1) \approx 0.37$ to $\exp(1) \approx 2.72$.
+As a rule of thumb, if we consider that $b$ ranges from -1 to 1 (approx. 95\% CI), then the average goal rate ranges follows a log-normal distribution ranging from $\exp(-1) \approx 0.37$ to $\exp(1) \approx 2.72$.
 - $\mathit{attack}_k$ and $\mathit{defence}_k$ follow the hierarchical prior:
 - $\mathit{attack}_k \sim \mathcal{N}(0, \sigma^2)$
 - $\mathit{defence}_k \sim \mathcal{N}(0, \sigma^2)$
@@ -380,12 +380,217 @@ stackhist_rank(compute_rank(fit, "rep"), teams)
 
 While the fit can help us understand what was going on during the season a posteriori, it is interesting to know to what extent the model is predictive.
 
-Forward chaining...
+Since we are dealing with time-series data and want to predict the future based on the past, it is not appropriate to use standard cross-validation techniques such as K-fold cross-validation, rather, we will implement forward chaining where the model is trained on the data from the first week and tested on the next, then trained on the data of the first two weeks and tested on the remaining weeks, etc.
 
-Prediction at mid-season: football statistics...
+```{r}
+HuraultMisc::illustrate_forward_chaining()
+```
+
+We can evaluate the performance of the model to predict the full time results using the Ranked Probability Score, a proper scoring rule to measure the accuracy of ordinal (cf. Lose < Draw < Win) probabilistic forecast.
+It is also possible to evaluate the model in its ability to predict the number of goals for instance.
+
+The following code implements the forward chaining.
+Considering the task is parallel in nature, it can be convenient to take advantage of multiple cores that might be available.
+
+```{r message=FALSE, warning=FALSE}
+n_cluster <- floor(parallel::detectCores() / n_chains)
+
+# Training unit
+df[["WeekNumber"]] <- strftime(df[["Date"]], format = "%Y-%V")
+weeks <- unique(df[["WeekNumber"]])
+
+# Update parameter of interest
+param_ind <- c("attack", "defence", param_test)
+param_obs <- c("home_goals_test", "away_goals_test")
+param <- c(param_pop, param_ind, param_obs)
+
+format_stan_data <- function(df) {
+  list(
+    N_teams = length(teams),
+    N_games = nrow(df),
+    home_goals = df[["FTHG"]],
+    away_goals = df[["FTAG"]],
+    home_id = sapply(df[["HomeTeam"]], function(x) {which(x == teams)}),
+    away_id = sapply(df[["AwayTeam"]], function(x) {which(x == teams)}),
+    run = 1
+  )
+}
+
+library(foreach)
+library(doParallel)
+
+duration <- Sys.time()
+cl <- makeCluster(n_cluster)
+registerDoParallel(cl)
+writeLines(c(""), "log.txt")
+
+out <- foreach(w = 1:(length(weeks) - 1)) %dopar% {
+  
+  source("functions.R")
+  library(rstan)
+  rstan_options(auto_write = TRUE) # Save compiled model
+  options(mc.cores = parallel::detectCores()) # Parallel computing
+  
+  sink("log.txt", append = TRUE)
+  cat(paste("Starting training at week ", w, " \n", sep = ""))
+  
+  df_train <- df[df$WeekNumber <= weeks[w], ]
+  df_test <- df[df[["WeekNumber"]] > weeks[w], ]
+  
+  data_stan <- format_stan_data(df_train)
+  
+  fit <- sampling(compiled_model,
+                  data = data_stan,
+                  pars = param,
+                  iter = n_it,
+                  chains = n_chains,
+                  seed = seed)
+  
+  # Parameters
+  par <- extract_parameters(fit, param = c(param_pop, param_ind), param_ind, param_obs, teams, df_train[["Game"]], data_stan)
+  par$WeekNumber <- weeks[w]
+  par$ProportionGamePlayed <- nrow(df_train) / nrow(df)
+  
+  # Rank
+  rk <- compute_rank(fit, "test")
+  rk <- do.call(rbind,
+                lapply(1:length(teams),
+                       function(i) {
+                         tmp <- table(factor(rk[, i], levels = 1:length(teams))) / nrow(rk)
+                         data.frame(Team = teams[i],
+                                    Rank = names(tmp),
+                                    Probability = as.numeric(tmp))
+                       }))
+  rk <- HuraultMisc::factor_to_numeric(rk, "Rank")
+  rk$WeekNumber <- weeks[w]
+  rk$ProportionGamePlayed <- nrow(df_train) / nrow(df)
+  
+  # Metrics
+  pred <- process_predictions(fit, id)
+  m <- compute_metrics(pred = pred, act = df, test_game = df_test[["Game"]], var = "FTR")
+  m$WeekNumber <- weeks[w]
+  m$ProportionGamePlayed <- nrow(df_train) / nrow(df)
+  
+  list(Performance = m, Parameters = par, Rank = rk)
+}
+stopCluster(cl)
+(duration = Sys.time() - duration)
+
+m <- do.call(rbind, lapply(out, function(x) {x$Performance}))
+par <- do.call(rbind, lapply(out, function(x) {x$Parameters}))
+rk <- do.call(rbind, lapply(out, function(x) {x$Rank}))
+```
+
+We can now plot the predictive performance of the model as a function of training week, or as a function of the proportion of game played in the season.
+
+```{r}
+ggplot(data = subset(m, Metric == "RPS"),
+       aes(x = ProportionGamePlayed, y = Mean, ymin = Mean - SE, ymax = Mean + SE)) +
+  geom_pointrange() +
+  scale_y_continuous(limits = c(0, NA)) +
+  labs(y = "RPS", title = "RPS learning curve (lower the better)") +
+  theme_bw(base_size = 15)
+```
+
+Although the RPS is slightly improving, it does not seem to be by much.
+We could investigate this by investigating how our belief in the teams abilities changes with time.
+
+```{r fig.width=10, fig.height=10}
+tmp <- subset(par, Variable %in% c("attack", "defence"))
+pl4 <- lapply(teams, function(x) {
+  cbbPalette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+  ggplot(data = subset(tmp, Team == x), 
+         aes(x = ProportionGamePlayed, y = Mean, ymin = `5%`, ymax = `95%`, colour = Variable, fill = Variable)) +
+    geom_line() +
+    geom_ribbon(alpha = 0.5) +
+    scale_colour_manual(values = cbbPalette) +
+    scale_fill_manual(values = cbbPalette) +
+    labs(title = x, y = "Ability", colour = "", fill = "") +
+    coord_cartesian(ylim = c(-1, 1)) +
+    theme_bw(base_size = 15)
+})
+plot_grid(get_legend(pl4[[1]] + theme(legend.position = "top")),
+          plot_grid(plotlist = lapply(pl4, function(p) {p + theme(legend.position = "none")}),
+                    nrow = 5),
+          nrow = 2, rel_heights = c(.05, .95))
+```
+
+Even though the abilities are learnt as more data comes in, they remain uncertain, which might explain the previous result.
+
+It can also be interesting to see how our predictions changes with time, for instance, how the uncertainty over the final ranking change as more games are played.
+The following plot depicts as an heatmap, the predicted rank at the end of the season as a function of the number of games played, for each team.
+As we could expect, early in the season, the predictions are quite uncertain but becomes more confident as fewer games remain to be played and as the model has better estimates of its parameters.
+
+```{r fig.width=10, fig.height=10}
+# Add first week ranking
+rk <- rbind(data.frame(expand.grid(Team = teams,
+                                   Rank = 1:length(teams)),
+                       Probability = 1 / length(teams),
+                       WeekNumber = strftime(min(df[["Date"]]) - 7, format = "%Y-%V"),
+                       ProportionGamePlayed = 0), # add first week
+            rk)
+
+# Add last week ranking
+tmp <- data.frame(expand.grid(Team = teams, Rank = 1:length(teams)),
+                  Probability = 0,
+                  WeekNumber = weeks[length(weeks)],
+                  ProportionGamePlayed = 1)
+for (i in 1:nrow(fstats)) {
+  id <- which((tmp[["Team"]] == fstats[i, "Team"]) & (tmp[["Rank"]] == fstats[i, "rank"]))
+  tmp[id, "Probability"] <- 1
+}
+rk <- rbind(rk, tmp)
+
+pl2 <- lapply(teams,
+              function(x) {
+                ggplot(data = subset(rk, Team == x),
+                       aes(x = factor(ProportionGamePlayed), y = Rank, fill = Probability)) +
+                  geom_tile() +
+                  scale_fill_viridis_c() +
+                  scale_y_continuous(expand = c(0, 0), breaks = 1:length(teams)) +
+                  scale_x_discrete(expand = c(0, 0), breaks = c(0, 0.5, 1)) +
+                  labs(title = x, x = "Proportion of game played*") + # * not exactly but close
+                  theme_classic(base_size = 15)
+              })
+plot_grid(get_legend(pl2[[1]] + theme(legend.position = "top")),
+          plot_grid(plotlist = lapply(pl2, function(x) {x + theme(legend.position = "none")}),
+                    nrow = 5),
+          nrow = 2, rel_heights = c(.05, .95))
+```
+
+For example, we can see how the prediction look like at the middle of the season.
+
+```{r message=FALSE, warning=FALSE}
+df_train <- df[df[["WeekNumber"]] <= median(weeks), ]
+test_game <- df[df[["WeekNumber"]] > median(weeks), "Game"]
+data_fit <- format_stan_data(df_train)
+fit <- sampling(compiled_model,
+                data = data_fit,
+                pars = param,
+                iter = n_it,
+                chains = n_chains)
+```
+
+```{r message=FALSE, warning=FALSE, fig.width=10, fig.height=10}
+PPC_football_stats(fit, "win_test", fstats, teams)
+PPC_football_stats(fit, "lose_test", fstats, teams)
+PPC_football_stats(fit, "point_test", fstats, teams)
+stackhist_rank(compute_rank(fit, "test"), teams)
+```
+
+The predictions look reasonable with respect to the outcome that is observed at the end of the season, however, there is still a lot of uncertainty at the mid-season.
+Interestingly, the last plot shows the model predict that Liverpool will win the championship with the probability of approximately 80% when in the end, it is Manchester City that will win!
 
 # Conclusion
 
-...
+The model is successfully fit to the data and can gives valuable insights into the teams abilities.
+
+When testing the predictive performance of the model, interestingly we find that the predictive performance becomes much better after the mid-season.
+
+What I find particularly interesting is that we could predict how the predicted rank at the end of the season can change as more games are being played.
+
+However, when trained on the full dataset, the parameters, notably the abilities, are still quite uncertain.
+It does not seem to hurt much the predictions for the outcome of a game (lose, draw, win) as what mostly matters for this is how the abilities of one team compares to the abilities of the other team.
+Still, the model does not accurately predict the number of goals scored.
 
 Keeping in mind that I lack the domain expertise to design a good model for this task, I nonetheless lay down a few ideas for improving the model in the [`Projects` tab of this repository](https://github.com/ghurault/football-prediction/projects/1).
