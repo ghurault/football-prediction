@@ -10,13 +10,12 @@ seed <- 1559354162
 set.seed(seed) # Reproducibility
 
 library(HuraultMisc)
-source("functions.R")
-
 library(ggplot2)
 library(cowplot)
 library(rstan)
 rstan_options(auto_write = TRUE) # Save compiled model
 options(mc.cores = parallel::detectCores()) # Parallel computing
+source("functions.R")
 
 data_file <- "Data/PremierLeague1819.csv"
 
@@ -161,8 +160,7 @@ rk <- do.call(rbind, lapply(out, function(x) {x$Rank}))
 
 # Analysis ----------------------------------------------------------------
 
-flag <- FALSE
-if (flag) {
+if (FALSE) {
   
   # Evolution of RPS (FTR) as a function of WeekNumber or ProportionGamePlayed
   pl1 <- lapply(unique(m$Metric),
