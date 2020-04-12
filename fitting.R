@@ -10,12 +10,11 @@ seed <- 1559354162
 set.seed(seed) # Reproducibility
 
 library(HuraultMisc)
-source("functions.R")
-
 library(ggplot2)
 library(rstan)
 rstan_options(auto_write = TRUE) # Save compiled model
 options(mc.cores = parallel::detectCores()) # Parallel computing
+source("functions.R")
 
 data_file <- "Data/PremierLeague1819.csv"
 
@@ -95,13 +94,13 @@ if (run) {
 if (FALSE) {
   
   # shinystan::launch_shinystan(fit)
-  
+  check_hmc_diagnostics(fit)
   pairs(fit, pars = param_pop)
   plot(fit, pars = param_pop, plotfun = "trace")
   
   # Plot estimates
   par <- extract_parameters(fit, param, param_ind, param_obs, teams, df$Game, data_stan)
-  HuraultMisc::plot_prior_posterior(par, par_prior, param_pop)
+  HuraultMisc::plot_prior_posterior(par_prior, par, param_pop)
   plot_abilities(par)
 
   # Posterior predictive checks
