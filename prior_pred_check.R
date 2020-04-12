@@ -9,12 +9,12 @@ rm(list = ls())
 set.seed(1559354162) # Reproducibility (different seed use in Stan)
 
 library(HuraultMisc)
-source("functions.R")
-
 library(ggplot2)
+library(cowplot)
 library(rstan)
 rstan_options(auto_write = TRUE) # Save compiled model
 options(mc.cores = parallel::detectCores()) # Parallel computing
+source("functions.R")
 
 run_prior <- TRUE
 run_fake <- TRUE
@@ -93,7 +93,7 @@ par_prior <- extract_parameters(fit_prior, param, param_ind, param_obs, teams, i
 
 if (FALSE) {
   
-  plot(fit_prior, pars = c(param_pop, paste(param_ind[1:2], "[1]", sep = "")), plotfun = "hist")
+  plot(fit_prior, pars = c(param_pop, paste0(param_ind[1:2], "[1]")), plotfun = "hist")
   
   # Exponentiate abilities
   lapply(paste(param_ind[1:2], "[1]", sep = ""),
@@ -111,7 +111,7 @@ if (FALSE) {
   mean(goals >= 20) # proportion of games with home/away goals greater than 20
   
   # Probability of wins/draws/lose
-  lapply(c("win", "lose", "draw"),
+  pl <- lapply(c("win", "lose", "draw"),
          function(x) {
            otc <- extract(fit_prior, pars = paste0(x, "_rep[1]"))[[1]]
            otc <- table(otc) / length(otc)
@@ -121,6 +121,7 @@ if (FALSE) {
              labs(x = paste0("Number of ", x), y = "Prior probability") +
              theme_bw(base_size = 15)
          })
+  plot_grid(plotlist = pl, ncol = 1)
   
   # Ranks (should be uniform by symmetry)
   rk <- compute_rank(fit_prior, "rep")[, 1]
@@ -204,7 +205,7 @@ if (FALSE) {
   par_fake <- extract_parameters(fit_fake, param, param_ind, param_obs, teams, fd$Game, data_stan)
   
   # Compare prior to posterior
-  HuraultMisc::plot_prior_posterior(par_fake, par_prior, param_pop)
+  HuraultMisc::plot_prior_posterior(par_prior, par_fake, param_pop)
   
   # Can we retrieve parameters?
   check_estimates(par_fake, true_param, param_pop, param_ind[1:2])
