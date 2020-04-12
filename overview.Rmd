@@ -11,7 +11,6 @@ output:
 # Introduction
 
 This repository contains the code of a personal project where I am implementing a simple "Dixon-Coles" model to predict the outcome of football games with the probabilistic programming language Stan.
-I am using public available [football data](http://football-data.co.uk/), notably the results of the 2018-2019 English Premier League season.
 
 As a disclaimer, I am not a particular fan of football and the presented model is far too simple to accurately model/predict the outcome of games and fortiori to be used for betting (and if the goal was betting, designing models for individual sports, or thing like darts or horse racing would probably be safer as the outcomes are less uncertain).
 Having said that, this project was fun and a good way for me to work with "clean" data and learn about Bayesian workflow.
@@ -27,7 +26,61 @@ Notably, I see my main contribution in the quantities that the model can predict
 - the ranking.
 
 In this notebook, I present an overview of what I have done in this project and which is directed to an audience with some familiarity in Bayesian modelling.
-A more complete account of what I have done remains unformatted, in the different scripts of this repository.
+
+Before going into the details of the analysis, let's first initialise the notebook.
+
+```{r message=FALSE}
+set.seed(1559354162) # Reproducibility
+library(HuraultMisc) # Personal function library
+library(ggplot2)
+library(cowplot)
+library(ggtext)
+library(rstan)
+rstan_options(auto_write = TRUE) # Save compiled model
+options(mc.cores = parallel::detectCores()) # Parallel computing
+source("functions.R") # Utility functions
+```
+
+# Data
+
+In this project, I am using publicly available [football data](http://football-data.co.uk/) of the 2018-2019 English Premier League season.
+
+We will only focus on the total number of goals scored by the home team ("Full Time Home Goal" or FTHG in the data), the total number of goals scored by the away team ("Full Time Away Goal", or FTAG in the data) and the results ("Full Time Results" or FTR in the data), which can can be "Home win" ("H" in the data), "Away win" ("A" in the data) and "Draw" ("D" in the data).
+
+Each of the 20 teams of the Premier League plays the other teams twice, once at home and once away, for a total number of 380 games.
+
+```{r}
+df0 <- read.csv("Data/PremierLeague1819.csv")
+
+# Processing
+df <- df0[, c("Div", "Date", "HomeTeam", "AwayTeam", "HTHG", "HTAG", "FTHG", "FTAG", "FTR")]
+df$FTR <- factor(df$FTR, levels = c("A", "D", "H"), ordered = TRUE)
+
+# Teams
+teams <- with(df, sort(unique(c(as.character(HomeTeam), as.character(AwayTeam)))))
+
+# Associate a unique ID to each game
+id <- game_id(teams)
+df <- merge(df, id, by = c("HomeTeam", "AwayTeam"))
+
+# Order by date
+df$Date <- as.Date(df$Date, "%d/%m/%Y")
+df <- df[order(df$Date), ]
+
+heatmap_results(df) +
+  labs(title = "Full time results of the 2018/2019 English Premier League")
+```
+
+
+In the English Premier League, a win is worth 3 points, a draw one point and no points is awarded for the losing a game.
+The team with the highest number of points at the end of the season wins the championship.
+The goal difference (number of goals scored minus number of goals conceded) when teams finish with an equal number of points.
+
+This season, Manchester City won the Premier League with 98 points, followed very closely by Liverpool with 97 points.
+
+```{r}
+(fstats <- football_stats(df)) # Football statistics
+```
 
 # Model
 
@@ -69,25 +122,10 @@ The model is implemented in [`Model/DC_model.stan`](Model/DC_model.stan).
 
 In this section, I perform prior predictive check to confirm that the choices of our priors result in simulated data that appears reasonable.
 
-First, let's initialise the session:
+Let's first prepare the ground to run MCMC.
 
 ```{r}
-set.seed(1559354162) # Reproducibility
-
-library(HuraultMisc) # Personal function library
-library(ggplot2)
-library(cowplot)
-library(rstan)
-rstan_options(auto_write = TRUE) # Save compiled model
-options(mc.cores = parallel::detectCores()) # Parallel computing
-source("functions.R") # Utility functions
-
-stan_code <- "Model/DC_model.stan"
-
-# Data parameters
-n_teams <- 20
-teams <- LETTERS[1:n_teams]
-id <- game_id(teams)
+compiled_model <- stan_model("Model/DC_model.stan")
 
 # MCMC options
 n_chains <- 4
@@ -102,26 +140,32 @@ param_test <- c("win_test", "draw_test", "lose_test",
 param_ind <- c("attack", "defence", param_rep)
 param_obs <- c("home_goals_rep", "away_goals_rep")
 param <- c(param_pop, param_ind, param_obs)
-
-compiled_model <- stan_model(stan_code)
 ```
 
 Then, we can simulate data from the prior predictive distribution by running Stan without evaluating the likelihood.
 
-```{r}
+```{r message=FALSE, warning=FALSE}
+# Characteristics of the data to generate
+n_teams <- 20
+teams_simu <- LETTERS[1:n_teams]
+id_simu <- game_id(teams_simu)
+
 data_prior <- list(
   N_teams = n_teams,
   N_games = n_teams * (n_teams - 1),
   home_goals = rep(1, n_teams * (n_teams - 1)), # doesn't matter
   away_goals = rep(1, n_teams * (n_teams - 1)), # doesn't matter
-  home_id = sapply(id[["HomeTeam"]], function(x) {which(x == teams)}),
-  away_id = sapply(id[["AwayTeam"]], function(x) {which(x == teams)}),
+  home_id = sapply(id_simu[["HomeTeam"]], function(x) {which(x == teams_simu)}),
+  away_id = sapply(id_simu[["AwayTeam"]], function(x) {which(x == teams_simu)}),
   run = 0
 )
 
-fit_prior <- sampling(compiled_model, data = data_prior, pars = param,
-                      iter = n_it, chains = n_chains)
-par_prior <- extract_parameters(fit_prior, param, param_ind, param_obs, teams, id$Game, data_stan) # Store parameters for later use
+fit_prior <- sampling(compiled_model,
+                      data = data_prior,
+                      pars = param,
+                      iter = n_it,
+                      chains = n_chains)
+par_prior <- extract_parameters(fit_prior, param, param_ind, param_obs, teams_simu, id_simu$Game, data_stan) # Store parameters for later use
 ```
 
 We can check the distribution of each individual parameter:
@@ -130,7 +174,9 @@ We can check the distribution of each individual parameter:
 plot(fit_prior, pars = c(param_pop, paste0(param_ind[1:2], "[1]")), plotfun = "hist")
 ```
 
-We can also inspect, for example, the number of goals scored by the home team for a random game (all teams or games are interchangeable as this point):
+We can also inspect, for example, the number of goals scored by the home team for a random game (all teams or games are interchangeable as this point).
+Although the prior distribution of goals has most of its mass for small values (e.g. $< 5$), it has a long tail suggesting that, for instance, the probability of the home team scoring more than 20 goals in the Premier League during one game is `r signif(mean(goals >= 20), 3)`, which even if its small, might be considered unrealistic considering this kind of event never happens during a season of 380 games.
+This would suggest making changes to the model but we will continue with it for illustration purposes.
 
 ```{r}
 goals <- extract(fit_prior, pars = c("home_goals_rep[1]"))[[1]]
@@ -138,26 +184,24 @@ summary(goals)
 hist(goals, breaks = 40)
 hist(goals[goals < 20], breaks = 20)
 quantile(goals, probs = c(.25, .5 , .75, .9, .99, .999))
-mean(goals >= 20) # proportion of games with home/away goals greater than 20
 ```
 
-Or the number of games won, lost or draw for a random team:
+We can also look at distribution of the number of games won, lost or draw for a random team:
 
 ```{r}
 pl <- lapply(c("win", "lose", "draw"),
              function(x) {
                otc <- extract(fit_prior, pars = paste0(x, "_rep[1]"))[[1]]
+               otc <- factor(otc, levels = 0:(2 * (n_teams - 1)))
                otc <- table(otc) / length(otc)
                ggplot(data = data.frame(otc), aes(x = otc, y = Freq)) +
                  geom_bar(stat = "identity") +
-                 scale_x_discrete(breaks = 1:(2 * (n_teams - 1))) +
+                 scale_x_discrete(breaks = seq(1, 2 * (n_teams - 1), 2)) +
                  labs(x = paste0("Number of ", x), y = "Prior probability") +
                  theme_bw(base_size = 15)
              })
 plot_grid(plotlist = pl, ncol = 1)
 ```
-
-Even though our model can assume that very large number of goals can be scored in a given game, we can consider the prior predictive distribution to be good enough to continue to the next step.
 
 # Fake data check
 
@@ -176,7 +220,7 @@ true_param <- rbind(
                  function(i) {
                    data.frame(Variable = names(true_param_ind)[i],
                               True = true_param_ind[[i]],
-                              Team = teams)
+                              Team = teams_simu)
                  })),
   do.call(rbind,
           lapply(1:length(true_param_pop),
@@ -188,7 +232,7 @@ true_param <- rbind(
 )
 
 # Fake data
-fd <- cbind(id,
+fd <- cbind(id_simu,
             data.frame(FTHG = extract(fit_prior, pars = "home_goals_rep")[[1]][draw, ],
                        FTAG = extract(fit_prior, pars = "away_goals_rep")[[1]][draw, ],
                        FTR = NA))
@@ -207,28 +251,31 @@ heatmap_results(fd)
 And we can also compute some statistics about this fake data:
 
 ```{r}
-(fstats <- football_stats(fd))
+(fstats_fake <- football_stats(fd))
 ```
 
 Let's now fit the model with the fake data:
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 data_fake <- list(
   N_teams = n_teams,
   N_games = n_teams * (n_teams - 1),
   home_goals = fd$FTHG,
   away_goals = fd$FTAG,
-  home_id = sapply(fd[["HomeTeam"]], function(x) {which(x == teams)}),
-  away_id = sapply(fd[["AwayTeam"]], function(x) {which(x == teams)}),
+  home_id = sapply(fd[["HomeTeam"]], function(x) {which(x == teams_simu)}),
+  away_id = sapply(fd[["AwayTeam"]], function(x) {which(x == teams_simu)}),
   run = 1
 )
 
-fit_fake <- sampling(compiled_model, data = data_fake, pars = param,
-                     iter = n_it, chains = n_chains)
-par_fake <- extract_parameters(fit_fake, param, param_ind, param_obs, teams, fd$Game, data_stan) # Store parameters for later use
+fit_fake <- sampling(compiled_model,
+                     data = data_fake,
+                     pars = param,
+                     iter = n_it,
+                     chains = n_chains)
+par_fake <- extract_parameters(fit_fake, param, param_ind, param_obs, teams_simu, fd$Game, data_stan)
 ```
 
-We should check the MCMC diagnostics:
+First, we should check the MCMC diagnostics: nothing to worry about.
 
 ```{r}
 check_hmc_diagnostics(fit_fake)
@@ -237,44 +284,101 @@ plot(fit_fake, pars = param_pop, plotfun = "trace")
 print(fit_fake, pars = param_pop)
 ```
 
-Everything appears to be fine.
-We can visualise the posterior estimate of the main parameters and compare them to their priors:
+Then we can visualise the posterior estimates of the main parameters.
+The priors seems weakly informative enough to "include" the posteriors.
 
 ```{r}
-HuraultMisc::plot_prior_posterior(par_fake, par_prior, param_pop)
+HuraultMisc::plot_prior_posterior(par_prior, par_fake, param_pop) +
+  labs(title = "<b>Posterior</b> vs <b style='color:#E69F00'>prior</b> estimates (mean and 90% CI)",
+       subtitle = "Population parameters",
+       y = "") +
+  theme(plot.title = element_markdown(),
+        plot.title.position = "plot",
+        legend.position = "none")
 ```
 
-Priors not to informative...
-Can we retrieve know parameters?...
+But are the posterior estimates close enough to the true parameters?
 
 ```{r}
-check_estimates(par_fake, true_param, param_pop, param_ind[1:2])
+(ce <- check_estimates(par_fake, true_param, param_pop, param_ind[1:2]))
 ```
 
-Everything fine...
-Posterior predictive checks to detect any discrepancies between data and replications
+Visually, they appear so, but we can also quantify it by computing, for example, the 90% coverage probability, i.e. the proportion of parameters falling in the 90% credible interval.
+Here the coverage is `r signif(ce$Coverage, 2)` which is close enough to what it should be, i.e. 90%.
 
-```{r}
-PPC_football_stats(fit_fake, "win_rep", fstats, teams)
-PPC_football_stats(fit_fake, "lose_rep", fstats, teams)
-PPC_football_stats(fit_fake, "goal_tot_rep", fstats, teams)
-PPC_football_stats(fit_fake, "point_rep", fstats, teams)
-stackhist_rank(compute_rank(fit_fake, "rep"), teams)
+Finally, we can perform posterior predictive checks to detect any discrepancies between the observed (here, fake) and the posterior replications.
+We can investigate several summary statistics such as the number of games won, lost or draws for a random team, as well as the total number of point or even if the final rank.
+From the plot, we can't identify any issues with the posterior replications.
+
+```{r fig.height = 10, fig.width = 10}
+PPC_football_stats(fit_fake, "win_rep", fstats_fake, teams_simu)
+PPC_football_stats(fit_fake, "lose_rep", fstats_fake, teams_simu)
+PPC_football_stats(fit_fake, "goal_tot_rep", fstats_fake, teams_simu)
+PPC_football_stats(fit_fake, "point_rep", fstats_fake, teams_simu)
+PPC_football_stats(fit_fake, "rank_rep", fstats_fake, teams_simu)
 ```
-
-Again, everything fine...
 
 NB: The fake data check can be repeated to make sure the model can estimate different realisations of the prior predictive distribution in a process that is called Simulation Based Calibration.
 
 # Model fitting
 
-Having confirmed that the model could be fitted in the previous section and seen what it could produce, in this section, we will train the model with real data.
+Having confirmed that the model could be fitted in the previous section and seen what it could produce, in this section, we will train the model with the data from the 2018/2019 season of the English Premier League.
 
-Look at data...
+```{r message=FALSE, warning=FALSE}
+data_fit <- list(
+  N_teams = length(teams),
+  N_games = nrow(df),
+  home_goals = df[["FTHG"]],
+  away_goals = df[["FTAG"]],
+  home_id = sapply(df[["HomeTeam"]], function(x) {which(x == teams)}),
+  away_id = sapply(df[["AwayTeam"]], function(x) {which(x == teams)}),
+  run = 1
+)
 
-Fit...
+fit <- sampling(compiled_model,
+                data = data_fit,
+                pars = param,
+                iter = n_it,
+                chains = n_chains)
+par <- extract_parameters(fit, param, param_ind, param_obs, teams, df$Game, data__fit)
+```
+
+First, we inspect converge diagnostics: nothing to worry about.
+
+```{r}
+check_hmc_diagnostics(fit)
+pairs(fit, pars = param_pop)
+plot(fit, pars = param_pop, plotfun = "trace")
+```
+
+Now we can look at the parameter estimates, notably the attack and defence abilities for each teams.
+It seems that Manchester City and Liverpool have the best a posteriori attack and defence abilities of this season.
+
+```{r}
+HuraultMisc::plot_prior_posterior(par_prior, par, param_pop) +
+  labs(title = "<b>Posterior</b> vs <b style='color:#E69F00'>prior</b> estimates (mean and 90% CI)",
+       subtitle = "Population parameters",
+       y = "") +
+  theme(plot.title = element_markdown(),
+        plot.title.position = "plot",
+        legend.position = "none")
+
+plot_abilities(par)
+```
+
+We can also look at the posterior predictive distribution.
+For concision, I will not the posterior probability for the number wins, lose, draws, goals or points, but we will at the posterior ranks.
+In the following plot, the size of the colour bars represent the probability at the given rank.
+For instance, the posterior probability for Manchester finishing first is slightly above 50% and around 30% for finishing second.
+Similarly, we can visually approximate the posterior probability for Liverpool finishing first to be 40% and a similar probability for finishing second.
+
+```{r warning=FALSE}
+stackhist_rank(compute_rank(fit, "rep"), teams)
+```
 
 # Model validation
+
+While the fit can help us understand what was going on during the season a posteriori, it is interesting to know to what extent the model is predictive.
 
 Forward chaining...
 
