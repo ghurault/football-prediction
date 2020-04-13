@@ -7,7 +7,7 @@
 
 This repository contains the code of a personal project where I am implementing a simple "Dixon-Coles" model to predict the outcome of football games in Stan, using publicly available [football data](http://football-data.co.uk/).
 
-As a starting point, I would suggest looking at the notebook (`overview.Rmd`)[overview.Rmd] summarising what I have done during this project, which one could access by clicking here: **[Getting started](https://ghurault.github.io/football-prediction/overview.nb.html)**.
+As a starting point, I would suggest looking at the notebook [`overview.Rmd`](overview.Rmd) summarising what I have done during this project, which one could access by clicking here: **[Getting started](https://ghurault.github.io/football-prediction/overview.nb.html)**.
 
 A more detailed analysis, is conducted in the other files in this repository:
 
