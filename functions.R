@@ -105,10 +105,13 @@ football_stats <- function(df) {
                     lose_home, lose_away, lose,
                     goal_tot_home, goal_tot_away, goal_tot,
                     goal_diff, point)
+  # Add rank
   out <- merge(out,
                data.frame(Team = teams[order(point, goal_diff, decreasing = TRUE)],
-                          rank = 1:length(teams)), # rank
+                          rank = 1:length(teams)),
                by = "Team")
+  out <- out[order(out[["rank"]]), ]
+  
   return(out)
 }
 
