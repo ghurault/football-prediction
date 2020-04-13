@@ -4,8 +4,8 @@ author: "Guillem Hurault"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
   html_notebook:
+    number_sections: yes
     toc: yes
-    number_sections: true
 ---
 
 # Introduction
@@ -72,9 +72,9 @@ heatmap_results(df) +
 ```
 
 
-In the English Premier League, a win is worth 3 points, a draw one point and no points is awarded for the losing a game.
+In the English Premier League, a win is worth 3 points, a draw 1 point and no points is awarded for the losing a game.
 The team with the highest number of points at the end of the season wins the championship.
-The goal difference (number of goals scored minus number of goals conceded) when teams finish with an equal number of points.
+The goal difference (number of goals scored minus number of goals conceded) is used to break ties when teams finish with an equal number of points.
 
 This season, Manchester City won the Premier League with 98 points, followed very closely by Liverpool with 97 points.
 
@@ -94,26 +94,26 @@ $$
 \log(\lambda_a) & = b + \mathit{attack_a} - \mathit{defence_h}
 \end{aligned}
 $$
-Where, for the $k$-th team:
+Where:
 
 - $b$ is the intercept, i.e. the logarithm of the average goals rate assuming the attack and defence abilities of the teams cancels out.
 - $\mathit{attack_k}$ and $\mathit{defence_k}$ are the latent attack and defence abilities of the $k$-th team.
 - $\mathit{advtg}$ is the home advantage.
 
-Priors for the parameters were chosen to be weakly informative and resulted in reasonable prior predictive distribution, as we will see in the next section:
+Priors for the parameters were chosen to be weakly informative and to result in reasonable prior predictive distributions, as we will see in the next section:
 
 - $b \sim \mathcal{N}(0, 0.5^2)$.
 This prior can be understood by considering a situation where the two teams have the same underlying attack and defence abilities and there is no home advantage, resulting in average goal rate of $\exp(b)$.
-As a rule of thumb, if we consider that $b$ ranges from -1 to 1 (approx. 95\% CI), then the average goal rate ranges follows a log-normal distribution ranging from $\exp(-1) \approx 0.37$ to $\exp(1) \approx 2.72$.
+As a rule of thumb, if we consider that $\mathcal{N}(0, 0.5^2)$ ranges from -1 to 1 (approx. 95\% CI), then the average goal rate follows a log-normal distribution ranging from $\exp(-1) \approx 0.37$ to $\exp(1) \approx 2.72$.
 - $\mathit{attack}_k$ and $\mathit{defence}_k$ follow the hierarchical prior:
-- $\mathit{attack}_k \sim \mathcal{N}(0, \sigma^2)$
-- $\mathit{defence}_k \sim \mathcal{N}(0, \sigma^2)$
-- $\sigma \sim \mathcal{N}^{+} \Big( 0, \big( \log(5) / 2.3 / \sqrt{2}\big)^2 \Big)$.
+  - $\mathit{attack}_k \sim \mathcal{N}(0, \sigma^2)$
+  - $\mathit{defence}_k \sim \mathcal{N}(0, \sigma^2)$
+  - $\sigma \sim \mathcal{N}^{+} \Big( 0, \big( \log(5) / 2.3 / \sqrt{2}\big)^2 \Big)$.
 This prior can be understood by considering that, if $\mathit{attack}_k$ and $\mathit{defence}_k$ are independent, then $\mathit{attack_h} - \mathit{defence_a} \sim \mathcal{N}\big( 0, (\sqrt{2} \sigma)^2 \big)$.
 If we are at the upper tail of the distribution, for instance at the 99\% quantile ($z = 2.3$), this means that the home team would score $\exp(2.3 * \sqrt{2} * \sigma)$ more goals than the global average.
-Here we consider that home team could score at most $5 = \exp(2.3 * \sqrt{2} * \sigma)$ times more goals than the average, hence the value for $\sigma$.
+Here we consider that the home team could score at most $5 = \exp(2.3 * \sqrt{2} * \sigma)$ times more goals than the average, hence the value for $\sigma$.
 - $\mathit{advtg} \sim \mathcal{N}(0.5, 0.25^2)$.
-Here, we assume that the home advantage is positive, meaning the advantage is actually an advantage in the sense that a team is more likely to score goals, everything else being equal, at home than away, but that the advantage is unlikely to be very big.
+Here, we assume that the home advantage is positive, meaning the advantage is indeed an advantage in the sense that a team is more likely to score goals, everything else being equal, at home than away, but that the advantage is unlikely to be very big.
 As a rule of thumb, $\mathit{advtg}$ would range from 0 to 1, meaning that at best, a team would score $\exp{1} \approx 3$ times more goals at home.
 
 The model is implemented in [`Model/DC_model.stan`](Model/DC_model.stan).
@@ -135,8 +135,6 @@ n_it <- 2000
 param_pop <- c("b", "home_advantage", "sigma_ability")
 param_rep <- c("win_rep", "draw_rep", "lose_rep",
                "goal_tot_rep", "goal_diff_rep", "point_rep")
-param_test <- c("win_test", "draw_test", "lose_test",
-                "goal_tot_test", "goal_diff_test", "point_test")
 param_ind <- c("attack", "defence", param_rep)
 param_obs <- c("home_goals_rep", "away_goals_rep")
 param <- c(param_pop, param_ind, param_obs)
@@ -175,8 +173,6 @@ plot(fit_prior, pars = c(param_pop, paste0(param_ind[1:2], "[1]")), plotfun = "h
 ```
 
 We can also inspect, for example, the number of goals scored by the home team for a random game (all teams or games are interchangeable as this point).
-Although the prior distribution of goals has most of its mass for small values (e.g. $< 5$), it has a long tail suggesting that, for instance, the probability of the home team scoring more than 20 goals in the Premier League during one game is `r signif(mean(goals >= 20), 3)`, which even if its small, might be considered unrealistic considering this kind of event never happens during a season of 380 games.
-This would suggest making changes to the model but we will continue with it for illustration purposes.
 
 ```{r}
 goals <- extract(fit_prior, pars = c("home_goals_rep[1]"))[[1]]
@@ -186,7 +182,11 @@ hist(goals[goals < 20], breaks = 20)
 quantile(goals, probs = c(.25, .5 , .75, .9, .99, .999))
 ```
 
-We can also look at distribution of the number of games won, lost or draw for a random team:
+Although the prior distribution of goals has most of its mass for small values (e.g. $< 5$), it has a long tail meaning that, for instance, the probability of the home team scoring more than 20 goals in the Premier League during one game is `r signif(mean(goals >= 20), 3)`.
+While this probability is small, the probability that happens at least once during 380 games is `r signif(1 - dbinom(0, 380, mean(goals >= 20)), 3)`, which might be considered unrealistic.
+This would suggest making changes to the model but we will continue with it for illustration purposes.
+
+We can also look at distribution of the number of games won, lost or ending with a draw for a random team:
 
 ```{r}
 pl <- lapply(c("win", "lose", "draw"),
@@ -284,20 +284,7 @@ plot(fit_fake, pars = param_pop, plotfun = "trace")
 print(fit_fake, pars = param_pop)
 ```
 
-Then we can visualise the posterior estimates of the main parameters.
-The priors seems weakly informative enough to "include" the posteriors.
-
-```{r}
-HuraultMisc::plot_prior_posterior(par_prior, par_fake, param_pop) +
-  labs(title = "<b>Posterior</b> vs <b style='color:#E69F00'>prior</b> estimates (mean and 90% CI)",
-       subtitle = "Population parameters",
-       y = "") +
-  theme(plot.title = element_markdown(),
-        plot.title.position = "plot",
-        legend.position = "none")
-```
-
-But are the posterior estimates close enough to the true parameters?
+Then, we can check whether the posterior estimates "close enough" to the true parameters?
 
 ```{r}
 (ce <- check_estimates(par_fake, true_param, param_pop, param_ind[1:2]))
@@ -308,7 +295,7 @@ Here the coverage is `r signif(ce$Coverage, 2)` which is close enough to what it
 
 Finally, we can perform posterior predictive checks to detect any discrepancies between the observed (here, fake) and the posterior replications.
 We can investigate several summary statistics such as the number of games won, lost or draws for a random team, as well as the total number of point or even if the final rank.
-From the plot, we can't identify any issues with the posterior replications.
+From the plot, we cannot visually identify any issues with the posterior replications.
 
 ```{r fig.height = 10, fig.width = 10}
 PPC_football_stats(fit_fake, "win_rep", fstats_fake, teams_simu)
@@ -322,7 +309,7 @@ NB: The fake data check can be repeated to make sure the model can estimate diff
 
 # Model fitting
 
-Having confirmed that the model could be fitted in the previous section and seen what it could produce, in this section, we will train the model with the data from the 2018/2019 season of the English Premier League.
+Having confirmed that the model could be fitted in the previous section, in this section, we will train the model with the data from the 2018/2019 season of the English Premier League.
 
 ```{r message=FALSE, warning=FALSE}
 data_fit <- list(
@@ -352,7 +339,8 @@ plot(fit, pars = param_pop, plotfun = "trace")
 ```
 
 Now we can look at the parameter estimates, notably the attack and defence abilities for each teams.
-It seems that Manchester City and Liverpool have the best a posteriori attack and defence abilities of this season.
+The coefficent plot for the population parameters reveal that the priors seems weakly informative enough to "include" the posteriors.
+In addition, we notice that Manchester City and Liverpool have the best a posteriori attack and defence abilities of this season, which is consistent with the fact that they finished first and second respectively.
 
 ```{r}
 HuraultMisc::plot_prior_posterior(par_prior, par, param_pop) +
@@ -367,7 +355,7 @@ plot_abilities(par)
 ```
 
 We can also look at the posterior predictive distribution.
-For concision, I will not the posterior probability for the number wins, lose, draws, goals or points, but we will at the posterior ranks.
+For concision, I am not plotting the posterior probability for the number wins, lose, draws, goals or points, but we will look at the posterior ranks.
 In the following plot, the size of the colour bars represent the probability at the given rank.
 For instance, the posterior probability for Manchester finishing first is slightly above 50% and around 30% for finishing second.
 Similarly, we can visually approximate the posterior probability for Liverpool finishing first to be 40% and a similar probability for finishing second.
@@ -400,6 +388,8 @@ df[["WeekNumber"]] <- strftime(df[["Date"]], format = "%Y-%V")
 weeks <- unique(df[["WeekNumber"]])
 
 # Update parameter of interest
+param_test <- c("win_test", "draw_test", "lose_test",
+                "goal_tot_test", "goal_diff_test", "point_test")
 param_ind <- c("attack", "defence", param_test)
 param_obs <- c("home_goals_test", "away_goals_test")
 param <- c(param_pop, param_ind, param_obs)
@@ -443,8 +433,7 @@ out <- foreach(w = 1:(length(weeks) - 1)) %dopar% {
                   data = data_stan,
                   pars = param,
                   iter = n_it,
-                  chains = n_chains,
-                  seed = seed)
+                  chains = n_chains)
   
   # Parameters
   par <- extract_parameters(fit, param = c(param_pop, param_ind), param_ind, param_obs, teams, df_train[["Game"]], data_stan)
@@ -517,8 +506,8 @@ plot_grid(get_legend(pl4[[1]] + theme(legend.position = "top")),
 
 Even though the abilities are learnt as more data comes in, they remain uncertain, which might explain the previous result.
 
-It can also be interesting to see how our predictions changes with time, for instance, how the uncertainty over the final ranking change as more games are played.
-The following plot depicts as an heatmap, the predicted rank at the end of the season as a function of the number of games played, for each team.
+It can also be interesting to see how our predictions changes with time, for instance, how the uncertainty over the final ranking is changing as more games are played.
+The following plot depicts, as an heatmap, the predicted rank at the end of the season as a function of the number of games played, for each team.
 As we could expect, early in the season, the predictions are quite uncertain but becomes more confident as fewer games remain to be played and as the model has better estimates of its parameters.
 
 ```{r fig.width=10, fig.height=10}
@@ -583,14 +572,10 @@ Interestingly, the last plot shows the model predict that Liverpool will win the
 
 # Conclusion
 
-The model is successfully fit to the data and can gives valuable insights into the teams abilities.
+The model was successfully fit to the data and can gives valuable insights into the teams abilities.
 
-When testing the predictive performance of the model, interestingly we find that the predictive performance becomes much better after the mid-season.
-
-What I find particularly interesting is that we could predict how the predicted rank at the end of the season can change as more games are being played.
-
-However, when trained on the full dataset, the parameters, notably the abilities, are still quite uncertain.
-It does not seem to hurt much the predictions for the outcome of a game (lose, draw, win) as what mostly matters for this is how the abilities of one team compares to the abilities of the other team.
-Still, the model does not accurately predict the number of goals scored.
+However, its predictive performance appears limited and we would need to move away from this simple "Dixon-Coles" model so we can make more accurate and practically useful predictions.
 
 Keeping in mind that I lack the domain expertise to design a good model for this task, I nonetheless lay down a few ideas for improving the model in the [`Projects` tab of this repository](https://github.com/ghurault/football-prediction/projects/1).
+
+Nonetheless, the Bayesian framework can be useful to make complex predictions beyond which team will win a specific game, but also final ranking at the end of the season.
