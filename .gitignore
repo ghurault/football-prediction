@@ -37,6 +37,6 @@ rsconnect/
 
 # Custom
 README.html
-Results/*
+Results/*.rds
 Model/*.rds
 log.txt
