@@ -12,7 +12,7 @@ output:
 
 This repository contains the code of a personal project where I am implementing a simple "Dixon-Coles" model to predict the outcome of football games with the probabilistic programming language Stan.
 
-As a disclaimer, I am not a particular fan of football and the presented model is far too simple to accurately model/predict the outcome of games and fortiori to be used for betting (and if the goal was betting, designing models for individual sports, or thing like darts or horse racing would probably be safer as the outcomes are less uncertain).
+As a disclaimer, I am not a particular fan of football and the presented model is far too simple to accurately model/predict the outcome of games and fortiori to be used for betting (and if the goal was betting, designing models for individual sports where the outcomes are less uncertain, such as darts or horse racing would probably be safer).
 Having said that, this project was fun and a good way for me to work with "clean" data and learn about Bayesian workflow.
 
 Notably, I see my main contribution in the quantities that the model can predict (cf. suffix `_test` in the Stan code) or that can be used for posterior predictive checking (cf. suffix `_rep`):
@@ -114,7 +114,7 @@ If we are at the upper tail of the distribution, for instance at the 99\% quanti
 Here we consider that the home team could score at most $5 = \exp(2.3 * \sqrt{2} * \sigma)$ times more goals than the average, hence the value for $\sigma$.
 - $\mathit{advtg} \sim \mathcal{N}(0.5, 0.25^2)$.
 Here, we assume that the home advantage is positive, meaning the advantage is indeed an advantage in the sense that a team is more likely to score goals, everything else being equal, at home than away, but that the advantage is unlikely to be very big.
-As a rule of thumb, $\mathit{advtg}$ would range from 0 to 1, meaning that at best, a team would score $\exp{1} \approx 3$ times more goals at home.
+As a rule of thumb, $\mathcal{N}(0.5, 0.25^2)$ would range from 0 to 1, meaning that at best, a team would score $\exp{1} \approx 3$ times more goals at home.
 
 The model is implemented in [`Model/DC_model.stan`](Model/DC_model.stan).
 
@@ -186,7 +186,7 @@ Although the prior distribution of goals has most of its mass for small values (
 While this probability is small, the probability that happens at least once during 380 games is `r signif(1 - dbinom(0, 380, mean(goals >= 20)), 3)`, which might be considered unrealistic.
 This would suggest making changes to the model but we will continue with it for illustration purposes.
 
-We can also look at distribution of the number of games won, lost or ending with a draw for a random team:
+We can also look at distribution of the number of games won, lost or ending with a draw for a random team, but we do not detect anything unrealistic:
 
 ```{r}
 pl <- lapply(c("win", "lose", "draw"),
@@ -338,7 +338,7 @@ pairs(fit, pars = param_pop)
 plot(fit, pars = param_pop, plotfun = "trace")
 ```
 
-Now we can look at the parameter estimates, notably the attack and defence abilities for each teams.
+Now we can look at the parameter estimates, the population parameters (e.g. parameters that are shared across teams) and the attack and defence abilities for each teams.
 The coefficent plot for the population parameters reveal that the priors seems weakly informative enough to "include" the posteriors.
 In addition, we notice that Manchester City and Liverpool have the best a posteriori attack and defence abilities of this season, which is consistent with the fact that they finished first and second respectively.
 
@@ -356,6 +356,7 @@ plot_abilities(par)
 
 We can also look at the posterior predictive distribution.
 For concision, I am not plotting the posterior probability for the number wins, lose, draws, goals or points, but we will look at the posterior ranks.
+
 In the following plot, the size of the colour bars represent the probability at the given rank.
 For instance, the posterior probability for Manchester finishing first is slightly above 50% and around 30% for finishing second.
 Similarly, we can visually approximate the posterior probability for Liverpool finishing first to be 40% and a similar probability for finishing second.
@@ -375,7 +376,7 @@ HuraultMisc::illustrate_forward_chaining()
 ```
 
 We can evaluate the performance of the model to predict the full time results using the Ranked Probability Score, a proper scoring rule to measure the accuracy of ordinal (cf. Lose < Draw < Win) probabilistic forecast.
-It is also possible to evaluate the model in its ability to predict the number of goals for instance.
+It is also possible to evaluate the model in its ability to predict the number of goals for instance, but I will not show these results here.
 
 The following code implements the forward chaining.
 Considering the task is parallel in nature, it can be convenient to take advantage of multiple cores that might be available.
@@ -481,8 +482,8 @@ ggplot(data = subset(m, Metric == "RPS"),
   theme_bw(base_size = 15)
 ```
 
-Although the RPS is slightly improving, it does not seem to be by much.
-We could investigate this by investigating how our belief in the teams abilities changes with time.
+Although the RPS is slightly improving, it does not seem to be by much, which suggest a limitation of such a simple model.
+We could investigate this by plotting how the believes in the teams abilities changes with time.
 
 ```{r fig.width=10, fig.height=10}
 tmp <- subset(par, Variable %in% c("attack", "defence"))
@@ -504,7 +505,7 @@ plot_grid(get_legend(pl4[[1]] + theme(legend.position = "top")),
           nrow = 2, rel_heights = c(.05, .95))
 ```
 
-Even though the abilities are learnt as more data comes in, they remain uncertain, which might explain the previous result.
+Even though the abilities are learnt as more data comes in, they remain uncertain, which could explain the previous result.
 
 It can also be interesting to see how our predictions changes with time, for instance, how the uncertainty over the final ranking is changing as more games are played.
 The following plot depicts, as an heatmap, the predicted rank at the end of the season as a function of the number of games played, for each team.
@@ -575,7 +576,14 @@ Interestingly, the last plot shows the model predict that Liverpool will win the
 The model was successfully fit to the data and can gives valuable insights into the teams abilities.
 
 However, its predictive performance appears limited and we would need to move away from this simple "Dixon-Coles" model so we can make more accurate and practically useful predictions.
+Keeping in mind I am far from being a domain expert, I could suggest to:
 
-Keeping in mind that I lack the domain expertise to design a good model for this task, I nonetheless lay down a few ideas for improving the model in the [`Projects` tab of this repository](https://github.com/ghurault/football-prediction/projects/1).
+- Predict the number of goals for each half-time periods. This would effectively double the data we are using and provide more accurate estimates of the teams abilities, and hopefully, better predictions.
+- Use a zero-inflated model to describe the fact that "no goals scored" happens more often than expected.
+- Assume correlated attack and defence abilities.
+- Model the fact that the latent abilities might change with time. For example, we could use a Random Walk or an Exponential Smoothing model to describe the evolution of abilities.
+- Team dependent home advantage. Some teams might have a bigger home advantage (better fans?) but at the same time, other teams could less sensitive to this effect.
+- If the data is available, model the team abilities as a combination of the abilities of each player.
+- etc.
 
 Nonetheless, the Bayesian framework can be useful to make complex predictions beyond which team will win a specific game, but also final ranking at the end of the season.
