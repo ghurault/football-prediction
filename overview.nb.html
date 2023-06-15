@@ -2316,7 +2316,7 @@ plot_abilities(par)</code></pre>
 <div id="model-validation" class="section level1">
 <h1><span class="header-section-number">7</span> Model validation</h1>
 <p>While the fit can help us understand what was going on during the season a posteriori, it is interesting to know to what extent the model is predictive.</p>
-<p>Since we are dealing with time-series data and want to predict the future based on the past, it is not appropriate to use standard cross-validation techniques such as K-fold cross-validation, rather, we will implement forward chaining where the model is trained on the data from the first week and tested on the next, then trained on the data of the first two weeks and tested on the remaining weeks, etc.</p>
+<p>Since we are dealing with time-series data and want to predict the future based on the past, it is not appropriate to use standard cross-validation techniques such as K-fold cross-validation, rather, we will implement forward chaining where the model is trained on the data from the first week and tested on the next, then trained on the data of the first two weeks and tested on the next week, etc. Validation data, as shown in figure, keeps a fixed week length. In this case one week is the length.</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
 <!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuSHVyYXVsdE1pc2M6OmlsbHVzdHJhdGVfZm9yd2FyZF9jaGFpbmluZygpXG5gYGAifQ== -->
